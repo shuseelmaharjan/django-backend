@@ -5,6 +5,6 @@ from rest_framework.response import Response
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
-@extend_schema(tags=["Health"])
+@extend_schema(tags=["META Startup"])
 def health(request):
     return Response({"status": "ok"})

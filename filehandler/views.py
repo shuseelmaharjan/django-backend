@@ -20,7 +20,7 @@ class BaseUploadView(generics.CreateAPIView):
             raise DRFValidationError({"detail": e.messages})
 
 @extend_schema(
-    tags=["File Handler"],
+    tags=["META File Handler"],
     summary="Upload temporary file",
     description="Uploads a file marked as temporary (auto-cleanup later).",
 )
@@ -31,7 +31,7 @@ class TemporaryUploadView(BaseUploadView):
     is_temporary_value = True
 
 @extend_schema(
-    tags=["File Handler"],
+    tags=["META File Handler"],
     summary="Upload permanent file",
     description="Uploads a file marked as permanent.",
 )
@@ -42,7 +42,7 @@ class PermanentUploadView(BaseUploadView):
     is_temporary_value = False
 
 @extend_schema(
-    tags=["File Handler"],
+    tags=["META File Handler"],
     summary="Delete file",
     description="Deletes a file and removes it from storage.",
 )

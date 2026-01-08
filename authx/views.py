@@ -150,7 +150,7 @@ class RefreshView(APIView):
         return resp
 
 
-@extend_schema(tags=["Who am I?"])
+@extend_schema(tags=["01. Auth"])
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
