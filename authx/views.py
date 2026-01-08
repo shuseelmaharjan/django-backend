@@ -59,7 +59,7 @@ class LoginView(APIView):
     permission_classes = [AllowAny]
 
     @extend_schema(
-        tags=["Auth"],
+        tags=["01. Auth"],
         request=LoginRequestSerializer,
         parameters=[CLIENT_TYPE_HEADER],
     )
