@@ -95,7 +95,7 @@ class RefreshView(APIView):
     permission_classes = [AllowAny]
 
     @extend_schema(
-        tags=["Auth"],
+        tags=["01. Auth"],
         parameters=[CLIENT_TYPE_HEADER, REFRESH_HEADER],
     )
     def post(self, request):
@@ -219,7 +219,7 @@ class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        tags=["Auth"],
+        tags=["01. Auth"],
         parameters=[CLIENT_TYPE_HEADER, REFRESH_HEADER],
     )
     def post(self, request):
