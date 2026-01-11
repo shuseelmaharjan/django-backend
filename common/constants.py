@@ -121,3 +121,47 @@ class PayrollStatus(models.TextChoices):
     APPROVED = "approved", "Approved"
     PAID = "paid", "Paid"
     CANCELLED = "cancelled", "Cancelled"
+
+
+COUNTRY_DATA = [
+    {
+        "country": "Nepal",
+        "country_code": "NP",
+        "currency": "NPR",
+        "dial_code": "+977",
+        "phone_length": 10,
+        "tel_length": 7,
+    },
+    {
+        "country": "India",
+        "country_code": "IN",
+        "currency": "INR",
+        "dial_code": "+91",
+        "phone_length": 10,
+        "tel_length": 7,
+    },
+    {
+        "country": "United States",
+        "country_code": "US",
+        "currency": "USD",
+        "dial_code": "+1",
+        "phone_length": 10,
+        "tel_length": 7,
+    },
+    {
+        "country": "Canada",
+        "country_code": "CA",
+        "currency": "CAD",
+        "dial_code": "+1",
+        "phone_length": 10,
+        "tel_length": 7,
+    },
+    {
+        "country": "Australia",
+        "country_code": "AU",
+        "currency": "AUD",
+        "dial_code": "+61",
+        "phone_length": 9,
+        "tel_length": 6,
+    },
+]
