@@ -2,13 +2,16 @@
 from rest_framework import serializers
 from filehandler.models import UploadedFile
 
-
 class UploadedFileSerializer(serializers.ModelSerializer):
+    file = serializers.FileField(write_only=True, required=True)
+    file_url = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = UploadedFile
         fields = [
             "id",
-            "file",
+            "file",       # upload input
+            "file_url",   # output url
             "file_type",
             "original_name",
             "size_bytes",
@@ -16,14 +19,11 @@ class UploadedFileSerializer(serializers.ModelSerializer):
             "meta",
             "uploaded_at",
         ]
-        read_only_fields = ["id", "original_name", "size_bytes", "uploaded_at"]
+        read_only_fields = ["id", "original_name", "size_bytes", "uploaded_at", "file_url"]
 
-    def create(self, validated_data):
+    def get_file_url(self, obj):
+        if not obj.file:
+            return None
         request = self.context.get("request")
-        instance = UploadedFile(**validated_data)
-
-        if request and request.user and request.user.is_authenticated:
-            instance.uploaded_by = request.user
-
-        instance.save()  # calls full_clean() inside model.save()
-        return instance
+        url = obj.file.url
+        return request.build_absolute_uri(url) if request else url
