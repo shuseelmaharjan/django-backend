@@ -21,11 +21,9 @@ class School(models.Model):
         related_name="+",
     )
 
-    timezone = models.CharField(max_length=64, default="Asia/Kathmandu")
-    currency = models.CharField(max_length=10, default="NPR")
-
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
 
     def __str__(self):
         return self.name
@@ -51,47 +49,6 @@ class School(models.Model):
         # If this school is being set to active, deactivate others
         if self.is_active:
             School.objects.exclude(pk=self.pk).update(is_active=False)
-        super().save(*args, **kwargs)
-
-
-class Campus(models. Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="campuses")
-    name = models.CharField(max_length=120)
-
-    address = models.CharField(max_length=255, blank=True, default="")
-    phone = models.CharField(max_length=40, blank=True, default="")
-
-    is_active = models.BooleanField(default=True)
-
-    class Meta:
-        unique_together = ("school", "name")
-
-    def __str__(self):
-        return f"{self.school.name} - {self.name}"
-
-    def clean(self):
-        """Ensure only one active campus per school and validate phone"""
-        from utils.phone_validator import clean_and_validate_phone
-
-        if self.is_active:
-            active_campuses = Campus.objects.filter(
-                school=self.school, is_active=True
-            )
-            if self.pk:
-                active_campuses = active_campuses.exclude(pk=self.pk)
-            if active_campuses.exists():
-                raise ValidationError("Only one campus can be active per school at a time.")
-
-        # Validate and format phone
-        if self.phone:
-            self.phone = clean_and_validate_phone(self.phone)
-
-    def save(self, *args, **kwargs):
-        self.full_clean()
-        # If this campus is being set to active, deactivate others for this school
-        if self.is_active:
-            Campus.objects.filter(school=self.school).exclude(pk=self.pk).update(is_active=False)
         super().save(*args, **kwargs)
 
 
