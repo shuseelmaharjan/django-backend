@@ -1,6 +1,7 @@
 from django.contrib.auth import authenticate
 from rest_framework import serializers
 from accounts.models import User
+from authx.models import UserSession
 
 
 # ==========================================================
@@ -38,7 +39,7 @@ class LoginSerializer(serializers.Serializer):
         if hasattr(authed, "status") and str(authed.status).lower() != "active":
             raise serializers.ValidationError("User account is inactive.")
 
-        attrs["user"] = authed  # ✅ use authenticated user
+        attrs["user"] = authed
         return attrs
 
 
@@ -137,3 +138,49 @@ class LogoutResponseSerializer(serializers.Serializer):
     """
 
     detail = serializers.CharField()
+
+class UserSessionSerializer(serializers.ModelSerializer):
+    is_active = serializers.SerializerMethodField()
+    is_current = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UserSession
+        fields = [
+            "id",
+            "client_type",
+            "device_id",
+            "device_name",
+            "os_name",
+            "os_version",
+            "app_version",
+            "ip_address",
+            "user_agent",
+            "created_at",
+            "last_seen_at",
+            "revoked_at",
+            "refresh_expires_at",
+            "is_active",
+            "is_current",
+        ]
+
+    def get_is_active(self, obj) -> bool:
+        return bool(obj.is_active)
+
+    def get_is_current(self, obj) -> bool:
+        """
+        The view will pass current_sid in serializer context.
+        """
+        current_sid = self.context.get("current_sid")
+        return bool(current_sid and str(obj.id) == str(current_sid))
+
+
+class SessionListResponseSerializer(serializers.Serializer):
+    """
+    Swagger response schema:
+    """
+    sessions = UserSessionSerializer(many=True)
+
+
+class RevokeSessionResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+    revoked_session_id = serializers.UUIDField(required=False)

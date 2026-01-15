@@ -1,12 +1,10 @@
 import uuid
 from django.db import models
-from django. core.exceptions import ValidationError
-from django.conf import settings
-
+from django.core.exceptions import ValidationError
 
 class School(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    code = models.SlugField(max_length=50, unique=True)  # e.g. "greenvalley"
+    code = models.SlugField(max_length=50, unique=True)
     name = models.CharField(max_length=150)
 
     address = models.CharField(max_length=255, blank=True, default="")
@@ -24,44 +22,33 @@ class School(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-
     def __str__(self):
         return self.name
 
     def clean(self):
-        """Ensure only one active school exists and validate phone"""
+        """
+        Validate and normalize phone.
+        (REMOVED: only-one-active-school restriction)
+        """
         from utils.phone_validator import clean_and_validate_phone
 
-        if self.is_active:
-            active_schools = School.objects.filter(is_active=True)
-            if self.pk:
-                active_schools = active_schools.exclude(pk=self.pk)
-            if active_schools.exists():
-                raise ValidationError("Only one school can be active at a time.")
-
-        # Validate and format phone
         if self.phone:
             self.phone = clean_and_validate_phone(self.phone)
 
-
     def save(self, *args, **kwargs):
+        # keep model-level validation
         self.full_clean()
-        # If this school is being set to active, deactivate others
-        if self.is_active:
-            School.objects.exclude(pk=self.pk).update(is_active=False)
         super().save(*args, **kwargs)
 
 
 class SchoolSetting(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid. uuid4, editable=False)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     school = models.OneToOneField(School, on_delete=models.CASCADE, related_name="settings")
 
-    # Billing numbering
     invoice_prefix = models.CharField(max_length=20, default="INV")
     receipt_prefix = models.CharField(max_length=20, default="RCPT")
     fiscal_year_label = models.CharField(max_length=30, blank=True, default="")
 
-    # Late fee policy (simple)
     late_fee_fixed = models.DecimalField(max_digits=10, decimal_places=2, default="0.00")
     late_fee_percent = models.DecimalField(max_digits=5, decimal_places=2, default="0.00")
 
@@ -72,8 +59,12 @@ class SchoolSetting(models.Model):
         return f"Settings({self.school.code})"
 
     def clean(self):
-        """Ensure only one active school setting exists"""
-        if self. is_active:
+        """
+        OPTIONAL:
+        If you also want multiple settings active, remove the restriction here too.
+        Currently this enforces only ONE active SchoolSetting globally.
+        """
+        if self.is_active:
             active_settings = SchoolSetting.objects.filter(is_active=True)
             if self.pk:
                 active_settings = active_settings.exclude(pk=self.pk)
@@ -82,7 +73,7 @@ class SchoolSetting(models.Model):
 
     def save(self, *args, **kwargs):
         self.full_clean()
-        # If this setting is being set to active, deactivate others
+        # OPTIONAL: remove this block if you want multiple active settings too.
         if self.is_active:
             SchoolSetting.objects.exclude(pk=self.pk).update(is_active=False)
         super().save(*args, **kwargs)

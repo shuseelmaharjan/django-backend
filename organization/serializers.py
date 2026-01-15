@@ -1,5 +1,4 @@
 from rest_framework import serializers
-
 from filehandler.serializers import UploadedFileSerializer
 from filehandler.models import UploadedFile
 from .models import School, SchoolSetting
@@ -7,9 +6,7 @@ from utils.phone_validator import clean_and_validate_phone
 
 
 class SchoolSerializer(serializers.ModelSerializer):
-    # keep nested read-only representation for responses
     logo_file = UploadedFileSerializer(read_only=True)
-    # allow clients to pass an uploaded file id when creating/updating
     logo_file_id = serializers.PrimaryKeyRelatedField(
         queryset=UploadedFile.objects.all(),
         source="logo_file",
@@ -32,10 +29,9 @@ class SchoolSerializer(serializers.ModelSerializer):
             "is_active",
             "created_at",
         ]
-        # is_active should be controlled by the server/business logic, not the client
-        read_only_fields = ["id", "created_at", "is_active"]
+        read_only_fields = ["id", "created_at"]
 
-    def validate_phone(self, value):
+    def validate_phone(self, value: str):
         if value:
             return clean_and_validate_phone(value)
         return value
