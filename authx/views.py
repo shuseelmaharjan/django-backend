@@ -3,20 +3,18 @@
 from django.conf import settings
 from django.utils import timezone
 
-from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
-
 from drf_spectacular.utils import (
     extend_schema,
     OpenApiParameter,
     OpenApiResponse,
 )
-
+from rest_framework import generics, permissions, status
 from authx.models import UserSession
 from authx.serializers import (
     # validation / output serializers you already have
@@ -24,10 +22,9 @@ from authx.serializers import (
     MeSerializer,
     # documentation serializers (add these in authx/serializers.py)
     LoginRequestSerializer,
-    LoginResponseSerializer,
-    RefreshResponseSerializer,
-    MeResponseSerializer,
-    LogoutResponseSerializer,
+    UserSessionSerializer,
+    SessionListResponseSerializer,
+    RevokeSessionResponseSerializer,
 )
 from authx.tokens import issue_tokens_and_session
 from authx.utils import (
@@ -57,7 +54,7 @@ REFRESH_HEADER = OpenApiParameter(
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
-
+    authentication_classes = []
     @extend_schema(
         tags=["01. Auth"],
         request=LoginRequestSerializer,
@@ -93,7 +90,7 @@ class LoginView(APIView):
 
 class RefreshView(APIView):
     permission_classes = [AllowAny]
-
+    authentication_classes = []
     @extend_schema(
         tags=["01. Auth"],
         parameters=[CLIENT_TYPE_HEADER, REFRESH_HEADER],
@@ -215,6 +212,7 @@ class MeView(APIView):
 
         return resp
 
+@extend_schema(tags=["01. Auth"])
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -237,3 +235,118 @@ class LogoutView(APIView):
         resp = Response({"detail": "Logged out"}, status=status.HTTP_200_OK)
         clear_refresh_cookie(resp)
         return resp
+
+
+@extend_schema(tags=["01. Auth"])
+class ActiveSessionListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="List all non-revoked sessions for current user (includes current device)",
+        responses={200: SessionListResponseSerializer},
+    )
+    def get(self, request):
+        # --- detect current sid ---
+        current_sid = None
+
+        # 1) If authenticated via access token, request.auth is the validated token object
+        token = getattr(request, "auth", None)
+        if token is not None:
+            try:
+                current_sid = str(token.get("sid", "")) or None
+            except Exception:
+                current_sid = None
+
+        # 2) If access token path didn't give sid (or refresh-fallback used), try refresh token
+        if not current_sid:
+            token_str = read_refresh_token(request)
+            if token_str:
+                try:
+                    rt = RefreshToken(token_str)
+                    current_sid = str(rt.get("sid", "")) or None
+                except TokenError:
+                    current_sid = None
+
+        # --- ONLY non-revoked sessions ---
+        qs = (
+            UserSession.objects.filter(user=request.user, revoked_at__isnull=True)
+            .order_by("-last_seen_at", "-created_at")
+        )
+
+        ser = UserSessionSerializer(qs, many=True, context={"current_sid": current_sid})
+        return Response({"sessions": ser.data}, status=status.HTTP_200_OK)
+
+@extend_schema(tags=["01. Auth"])
+class RevokeSessionView(APIView):
+    """
+    Revoke one session by id (remove device).
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Revoke a session (remove device)",
+        responses={200: RevokeSessionResponseSerializer, 404: OpenApiResponse(description="Not found")},
+    )
+    def post(self, request, session_id):
+        session = UserSession.objects.filter(id=session_id, user=request.user).first()
+        if not session:
+            return Response({"detail": "Session not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # If it’s already revoked, return OK (idempotent)
+        if not session.revoked_at:
+            session.revoke()
+
+        # If the user revoked *this same device/current session*,
+        # it's nice UX to clear refresh cookie (web) so client doesn't keep trying.
+        # We can detect current sid from refresh token if present.
+        token_str = read_refresh_token(request)
+        resp = Response(
+            {"detail": "Session revoked.", "revoked_session_id": str(session.id)},
+            status=status.HTTP_200_OK,
+        )
+
+        if token_str:
+            try:
+                rt = RefreshToken(token_str)
+                current_sid = str(rt.get("sid", ""))
+                if current_sid and current_sid == str(session.id):
+                    clear_refresh_cookie(resp)
+            except TokenError:
+                # refresh token broken; cookie clearing is still fine
+                clear_refresh_cookie(resp)
+
+        return resp
+
+
+@extend_schema(tags=["01. Auth"])
+class RevokeOtherSessionsView(APIView):
+    """
+    Revoke all sessions except the current one.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Revoke all other sessions",
+        responses={200: RevokeSessionResponseSerializer},
+    )
+    def post(self, request):
+        token_str = read_refresh_token(request)
+        current_sid = None
+
+        if token_str:
+            try:
+                rt = RefreshToken(token_str)
+                current_sid = str(rt.get("sid", "")) or None
+            except TokenError:
+                current_sid = None
+
+        qs = UserSession.objects.filter(user=request.user, revoked_at__isnull=True)
+        if current_sid:
+            qs = qs.exclude(id=current_sid)
+
+        count = qs.update(revoked_at=timezone.now())
+
+        return Response(
+            {"detail": f"Revoked {count} other session(s)."},
+            status=status.HTTP_200_OK,
+        )

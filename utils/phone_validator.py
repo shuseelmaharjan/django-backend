@@ -1,18 +1,5 @@
-from django.conf import settings
 from django.core.exceptions import ValidationError
-from common.constants import COUNTRY_DATA
-
-
-def get_country_config():
-    """Get country configuration from environment"""
-    country_name = getattr(settings, 'COUNTRY', 'Nepal')
-
-    for country in COUNTRY_DATA:
-        if country['country'] == country_name:
-            return country
-
-    # Default to Nepal if not found
-    return COUNTRY_DATA[0]
+from utils.user_validators import get_country_config
 
 
 def validate_phone_number(phone_number, country_config=None):
