@@ -4,6 +4,12 @@ from rest_framework import serializers
 from accounts.models import User, RoleAssignment, Role
 from students.models import StudentProfile, StudentAddress, StudentGuardian, StudentDocument
 from staff.models import StaffProfile, TeacherProfile, TeacherAssignment
+from utils.user_validators import (
+    validate_email_unique,
+    validate_username_unique,
+    normalize_and_validate_phone,
+)
+from organization.models import School
 
 
 class ChangePasswordRequestSerializer(serializers.Serializer):
@@ -313,3 +319,30 @@ class RoleAssignmentSerializer(serializers.ModelSerializer):
         validated_data.pop("_role_obj", None)
 
         return super().update(instance, validated_data)
+
+class CreatePrincipalRequestSerializer(serializers.Serializer):
+    school_id = serializers.UUIDField()
+    email = serializers.EmailField()
+    password = serializers.CharField(required=False, allow_blank=True)
+    username = serializers.CharField(required=False, allow_blank=True, max_length=150)
+    phone = serializers.CharField(required=False, allow_blank=True, max_length=32)
+
+    first_name = serializers.CharField(required=False, allow_blank=True)
+    last_name = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_school_id(self, value):
+        if not School.objects.filter(id=value).exists():
+            raise serializers.ValidationError("School not found.")
+        return value
+
+    def validate_email(self, value):
+        return validate_email_unique(value, exclude_user_id=None)
+
+    def validate_username(self, value):
+        if value:
+            return validate_username_unique(value, exclude_user_id=None)
+        return value
+
+    def validate_phone(self, value):
+        # allow blank
+        return normalize_and_validate_phone(value, exclude_user_id=None, allow_blank=True)

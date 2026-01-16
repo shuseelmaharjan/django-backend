@@ -43,6 +43,8 @@ class School(models.Model):
 
 class SchoolSetting(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    # One setting per school (still true because OneToOne)
     school = models.OneToOneField(School, on_delete=models.CASCADE, related_name="settings")
 
     invoice_prefix = models.CharField(max_length=20, default="INV")
@@ -57,23 +59,3 @@ class SchoolSetting(models.Model):
 
     def __str__(self):
         return f"Settings({self.school.code})"
-
-    def clean(self):
-        """
-        OPTIONAL:
-        If you also want multiple settings active, remove the restriction here too.
-        Currently this enforces only ONE active SchoolSetting globally.
-        """
-        if self.is_active:
-            active_settings = SchoolSetting.objects.filter(is_active=True)
-            if self.pk:
-                active_settings = active_settings.exclude(pk=self.pk)
-            if active_settings.exists():
-                raise ValidationError("Only one school setting can be active at a time.")
-
-    def save(self, *args, **kwargs):
-        self.full_clean()
-        # OPTIONAL: remove this block if you want multiple active settings too.
-        if self.is_active:
-            SchoolSetting.objects.exclude(pk=self.pk).update(is_active=False)
-        super().save(*args, **kwargs)

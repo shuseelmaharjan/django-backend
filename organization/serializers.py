@@ -55,3 +55,12 @@ class SchoolSettingSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "updated_at"]
+
+    def validate_school(self, school):
+        request = self.context.get("request")
+        if request and request.method == "POST":
+            if SchoolSetting.objects.filter(school=school).exists():
+                raise serializers.ValidationError(
+                    "Settings already exist for this school. Use PUT/PATCH to update."
+                )
+        return school
