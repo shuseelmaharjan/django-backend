@@ -1,42 +1,87 @@
+# accounts/models.py
 import uuid
+
 from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
-from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-from common.constants import UserStatus, ScopeType
+from common.constants import UserStatus, UserRole
+
+
+def _gen_username_from_phone(phone: str) -> str:
+    # simple default: "u_<last 8 digits>"
+    digits = "".join(ch for ch in str(phone) if ch.isdigit())
+    tail = digits[-8:] if len(digits) >= 8 else digits
+    return f"u_{tail}" if tail else f"u_{uuid.uuid4().hex[:10]}"
+
 
 class UserManager(BaseUserManager):
     use_in_migrations = True
 
-    def create_user(self, email, password=None, **extra_fields):
-        if not email:
-            raise ValueError("Email is required")
-        email = self.normalize_email(email)
-        user = self.model(email=email, username=email, **extra_fields)
+    def create_user(self, phone, password=None, **extra_fields):
+        if not phone:
+            raise ValueError("Phone number is required")
+
+        try:
+            from utils.phone_validator import clean_and_validate_phone
+            phone = clean_and_validate_phone(phone)
+        except Exception:
+            phone = str(phone).strip()
+
+        # ensure username exists (auto)
+        extra_fields.setdefault("username", _gen_username_from_phone(phone))
+
+        user = self.model(phone=phone, **extra_fields)
+
         if password:
             user.set_password(password)
         else:
             user.set_unusable_password()
+
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, email, password=None, **extra_fields):
+    def create_superuser(self, phone, password=None, **extra_fields):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("status", UserStatus.ACTIVE)
-        return self.create_user(email=email, password=password, **extra_fields)
+        extra_fields.setdefault("role", UserRole.SUPERADMIN)
+
+        if not password:
+            raise ValueError("Superadmin must have a password")
+
+        return self.create_user(phone=phone, password=password, **extra_fields)
 
 
 class User(AbstractUser):
     """
-    Minimal but future-proof user model.
-    - email login
-    - status flag
+    Phone-based login user model.
+
+    Supports:
+    - phone as login (unique, required)
+    - enum role
+    - status lifecycle
+    - first/middle/last name
+    - profile picture (UploadedFile)
+    - auto-generated unique username (not used for login)
     """
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
-    username = models.CharField(max_length=150, unique=False, blank=True)
-    email = models.EmailField(unique=True)
+    # Phone is the login identifier
+    phone = models.CharField(max_length=32, unique=True, db_index=True)
+
+    # Email optional (not unique)
+    email = models.EmailField(blank=True, default="")
+
+    # Middle name (AbstractUser already provides first_name + last_name)
+    middle_name = models.CharField(max_length=80, blank=True, default="")
+
+    role = models.CharField(
+        max_length=20,
+        choices=UserRole.choices,
+        default=UserRole.OTHER,
+        db_index=True,
+    )
 
     status = models.CharField(
         max_length=20,
@@ -45,81 +90,48 @@ class User(AbstractUser):
         db_index=True,
     )
 
-    phone = models.CharField(max_length=32, blank=True, default="")
+    profile_picture_file = models.ForeignKey(
+        "filehandler.UploadedFile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
 
-    # if you want avatar/photo etc later:
-    # avatar_file = models.ForeignKey("filehandler.UploadedFile", ...)
+    # make username unique if you're autogenerating it
+    username = models.CharField(max_length=150, unique=True, blank=True, default="")
 
-    USERNAME_FIELD = "email"
+    USERNAME_FIELD = "phone"
     REQUIRED_FIELDS = []
 
     objects = UserManager()
 
-    def __str__(self):
-        return self.email
+    def clean(self):
+        super().clean()
+        if self.phone:
+            try:
+                from utils.phone_validator import clean_and_validate_phone
+                self.phone = clean_and_validate_phone(self.phone)
+            except Exception:
+                self.phone = str(self.phone).strip()
 
+    def save(self, *args, **kwargs):
+        # Auto-generate username if missing
+        if not self.username:
+            base = _gen_username_from_phone(self.phone)
+            candidate = base
+            i = 1
+            while User.objects.filter(username=candidate).exclude(pk=self.pk).exists():
+                i += 1
+                candidate = f"{base}_{i}"
+            self.username = candidate
 
-class Role(models.Model):
-    """
-    Coarse role: Admin, Teacher, Student, Parent, Accountant, Coordinator, etc.
-    Keep it simple now.
-    """
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    school_id = models.CharField(max_length=64, db_index=True, default="*")
-    code = models.SlugField(max_length=50)    # e.g. "admin", "teacher"
-    name = models.CharField(max_length=80)
+        # Keep Django admin expectation: superuser must be staff
+        if self.is_superuser:
+            self.is_staff = True
 
-    is_system = models.BooleanField(default=False)  # lock core roles if you want
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["school_id", "code"], name="uq_role_school_code"),
-        ]
-
-    def __str__(self):
-        return self.name
-
-
-class RoleAssignment(models.Model):
-    """
-    Assign a role to a user with a scope.
-    Examples:
-      - Teacher scoped to class=10A
-      - Accountant scoped to school=XYZ
-      - Admin scoped global
-    """
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-
-    user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="role_assignments")
-    role = models.ForeignKey("accounts.Role", on_delete=models.PROTECT, related_name="assignments")
-
-    scope_type = models.CharField(max_length=20, choices=ScopeType.choices, default=ScopeType.GLOBAL)
-    scope_id = models.CharField(max_length=64, default="*")  # flexible string id, e.g. "school-1", "class-10A"
-
-    valid_from = models.DateTimeField(null=True, blank=True)
-    valid_to = models.DateTimeField(null=True, blank=True)
-
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["user", "role", "scope_type", "scope_id"],
-                name="uq_user_role_scope",
-            )
-        ]
-        indexes = [
-            models.Index(fields=["user", "role"]),
-            models.Index(fields=["scope_type", "scope_id"]),
-        ]
-
-    def is_active(self, at=None) -> bool:
-        at = at or timezone.now()
-        if self.valid_from and at < self.valid_from:
-            return False
-        if self.valid_to and at > self.valid_to:
-            return False
-        return True
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.user.email} -> {self.role.code} ({self.scope_type}:{self.scope_id})"
+        full = " ".join([self.first_name, self.middle_name, self.last_name]).strip()
+        return full or self.phone

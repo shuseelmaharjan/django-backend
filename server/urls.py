@@ -39,23 +39,7 @@ urlpatterns = [
     # App routes
     path("api/startup/", include("startup.urls")),
     path("api/", include("filehandler.urls")),
-
-    path("api/v1/org/", include("organization.urls")),
-    path("api/v1/accounts/", include("accounts.urls_roles")),
-    path("api/v1/profile/", include("accounts.urls")),
-    path("api/v1/academics/", include("academics.urls")),
-    path("api/v1/students/", include("students.urls")),
-    path("api/v1/enrollment/", include("enrollment.urls")),
-    path("api/staff/", include("staff.urls")),
-    path("api/fees/", include("fees.urls")),
-    path("api/billing/", include("billing.urls")),
-    path("api/v1/staff/", include("staff.urls_attendance")),
-    path("api/v1/communication/", include("communication.urls")),
-    path("api/v1/assessments/", include("assessments.urls_subjects")),
-    path("api/v1/assessments/", include("assessments.urls_subjects")),   # your existing subjects
-    path("api/v1/assessments/", include("assessments.urls_core")),       # step 13
-    path("api/v1/assessments/", include("assessments.urls_tests")),      # step 14
-    path("api/v1/assessments/", include("assessments.urls_attempts")),   # step 15
+    path("api/v1/accounts/", include("accounts.urls")),
 
 
 

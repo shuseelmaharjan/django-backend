@@ -2,42 +2,50 @@ from django.contrib.auth import authenticate
 from rest_framework import serializers
 from accounts.models import User
 from authx.models import UserSession
-
+from utils.phone_utils import normalize_phone_for_login
+from common.constants import UserStatus
+from utils.phone_utils import strip_dial_code
 
 # ==========================================================
 # Login (validation serializer – used by view logic)
 # ==========================================================
 class LoginSerializer(serializers.Serializer):
-    identifier = serializers.CharField(help_text="Email or phone number")
+    identifier = serializers.CharField(help_text="Phone number")
     password = serializers.CharField(write_only=True)
 
     def validate(self, attrs):
         identifier = attrs["identifier"].strip()
         password = attrs["password"]
 
-        # Try email/phone/username lookup (more robust)
+        # Normalize phone (ignore dial code issues)
+        normalized_phone = normalize_phone_for_login(identifier)
+
         user = (
-            User.objects.filter(email__iexact=identifier).first()
-            or User.objects.filter(phone=identifier).first()
+            User.objects.filter(phone=normalized_phone).first()
             or User.objects.filter(username__iexact=identifier).first()
+            or User.objects.filter(email__iexact=identifier).first()
         )
 
         if not user:
             raise serializers.ValidationError("Invalid credentials.")
 
-        # IMPORTANT: pass request + authenticate using the identifier the backend expects
+        if not user.has_usable_password():
+            raise serializers.ValidationError("Password not set for this account.")
+
         request = self.context.get("request")
 
-        # If your USERNAME_FIELD is email, this works with ModelBackend:
-        authed = authenticate(request=request, username=user.email, password=password)
+        # IMPORTANT: authenticate with PHONE (USERNAME_FIELD)
+        authed = authenticate(
+            request=request,
+            username=user.phone,
+            password=password,
+        )
 
         if not authed:
-            # This means: password mismatch OR backend isn't configured to authenticate this user model
             raise serializers.ValidationError("Invalid credentials.")
 
-        # Optional status check
-        if hasattr(authed, "status") and str(authed.status).lower() != "active":
-            raise serializers.ValidationError("User account is inactive.")
+        if authed.status != UserStatus.ACTIVE:
+            raise serializers.ValidationError(f"Account is {authed.status}.")
 
         attrs["user"] = authed
         return attrs
@@ -63,21 +71,44 @@ class LoginRequestSerializer(serializers.Serializer):
 # User serializers
 # ==========================================================
 class UserSerializer(serializers.ModelSerializer):
-    """
-    Canonical user payload returned by auth APIs
-    """
+    phone = serializers.SerializerMethodField()
+    name = serializers.SerializerMethodField()
+    role = serializers.CharField(source="get_role_display")
 
     class Meta:
         model = User
         fields = [
             "id",
-            "email",
+            "name",
             "phone",
-            "first_name",
-            "last_name",
-            "is_staff",
-            "is_superuser",
+            "email",
+            "role",
+            "status",
+            "profile_picture_file",
         ]
+
+    def get_phone(self, obj):
+        return strip_dial_code(obj.phone)
+
+    def get_name(self, obj):
+        def clean(part: str) -> str:
+            if not part:
+                return ""
+            part = part.strip()
+
+            # Ignore placeholder / junk values
+            if part.lower() in {"#", "# optional", "optional", "none", "null", "-"}:
+                return ""
+
+            return part
+
+        parts = [
+            clean(obj.first_name),
+            clean(obj.middle_name),
+            clean(obj.last_name),
+        ]
+
+        return " ".join(p for p in parts if p)
 
 
 class MeSerializer(UserSerializer):
