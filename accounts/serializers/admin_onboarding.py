@@ -2,7 +2,7 @@
 from rest_framework import serializers
 from accounts.models import User
 from schools.models import School
-from profiles.models import Profile, Address, ProfileDocument
+from profiles.models import Profile, Address, ProfileDocument, Gender, BloodGroup
 
 import datetime
 import nepali_datetime
@@ -22,6 +22,50 @@ def ad_to_bs_str(ad_date: datetime.date) -> str:
     return f"{bs.year:04d}-{bs.month:02d}-{bs.day:02d}"
 
 
+# -----------------------------
+# Nepal phone/tel validation (School.phone)
+# -----------------------------
+PHONE_STARTSWITH = ("97", "98")
+TEL_STARTSWITH = ("01",)
+PHONE_LENGTH = 10         # total digits (no dial code)
+TEL_REST_LENGTH = 7       # digits AFTER '01' must be 7 => total 9
+
+
+def normalize_digits(value: str) -> str:
+    return "".join(ch for ch in str(value or "") if ch.isdigit())
+
+
+def validate_nepal_phone_or_tel(value: str) -> str:
+    """
+    Accepts:
+      - mobile: 97/98 + total 10 digits
+      - tel: 01 + (7 digits after 01) => total 9 digits
+    Supports optional 977 or +977 prefix (removed automatically).
+    """
+    raw = (value or "").strip()
+    digits = normalize_digits(raw)
+
+    # strip country code if present
+    if digits.startswith("977") and len(digits) > 3:
+        digits = digits[3:]
+
+    if len(digits) == PHONE_LENGTH and digits.startswith(PHONE_STARTSWITH):
+        return digits
+
+    if digits.startswith(TEL_STARTSWITH):
+        rest = digits[2:]
+        if len(rest) == TEL_REST_LENGTH:
+            return digits
+
+    raise serializers.ValidationError(
+        "Invalid phone. Use Nepal mobile (97/98 + 10 digits) or tel (01 + 7 digits after 01). "
+        "Do not include dial code; +977/977 is allowed but will be stripped."
+    )
+
+
+# -----------------------------
+# Personal Info
+# -----------------------------
 class AdminPersonalInfoCreateSerializer(serializers.Serializer):
     phone = serializers.CharField(max_length=32)
     email = serializers.EmailField(required=False, allow_blank=True)
@@ -49,6 +93,9 @@ class AdminPersonalInfoUpdateSerializer(serializers.ModelSerializer):
         return value
 
 
+# -----------------------------
+# School Info (ALL mandatory)
+# -----------------------------
 class AdminSchoolInfoCreateSerializer(serializers.ModelSerializer):
     owner_id = serializers.UUIDField(write_only=True)
 
@@ -61,12 +108,31 @@ class AdminSchoolInfoCreateSerializer(serializers.ModelSerializer):
             "logo_file",
             "pan_number", "registration_number",
             "pan_document_file", "registration_document_file",
-            "user_photo", "citizenship_front", "citizenship_back",
             "is_active",
         ]
+        extra_kwargs = {
+            "code": {"required": True, "allow_blank": False},
+            "name": {"required": True, "allow_blank": False},
+            "address": {"required": True, "allow_blank": False},
+            "phone": {"required": True, "allow_blank": False},
+            "email": {"required": True, "allow_blank": False},
+            "logo_file": {"required": True, "allow_null": False},
+            "pan_number": {"required": True, "allow_blank": False},
+            "registration_number": {"required": True, "allow_blank": False},
+            "pan_document_file": {"required": True, "allow_null": False},
+            "registration_document_file": {"required": True, "allow_null": False},
+            "is_active": {"required": True},
+        }
+
+    def validate_phone(self, value):
+        return validate_nepal_phone_or_tel(value)
 
 
 class AdminSchoolInfoUpdateSerializer(serializers.ModelSerializer):
+    """
+    If you want UPDATE also mandatory, keep same rules.
+    If you want partial update later, change required=False per field.
+    """
     class Meta:
         model = School
         fields = [
@@ -75,9 +141,24 @@ class AdminSchoolInfoUpdateSerializer(serializers.ModelSerializer):
             "logo_file",
             "pan_number", "registration_number",
             "pan_document_file", "registration_document_file",
-            "user_photo", "citizenship_front", "citizenship_back",
             "is_active",
         ]
+        extra_kwargs = {
+            "code": {"required": True, "allow_blank": False},
+            "name": {"required": True, "allow_blank": False},
+            "address": {"required": True, "allow_blank": False},
+            "phone": {"required": True, "allow_blank": False},
+            "email": {"required": True, "allow_blank": False},
+            "logo_file": {"required": True, "allow_null": False},
+            "pan_number": {"required": True, "allow_blank": False},
+            "registration_number": {"required": True, "allow_blank": False},
+            "pan_document_file": {"required": True, "allow_null": False},
+            "registration_document_file": {"required": True, "allow_null": False},
+            "is_active": {"required": True},
+        }
+
+    def validate_phone(self, value):
+        return validate_nepal_phone_or_tel(value)
 
 
 # -----------------------------
@@ -85,68 +166,119 @@ class AdminSchoolInfoUpdateSerializer(serializers.ModelSerializer):
 # -----------------------------
 class AddressInputSerializer(serializers.Serializer):
     address_type = serializers.ChoiceField(choices=Address._meta.get_field("address_type").choices)
-    country = serializers.CharField(required=False, allow_blank=True)
-    province = serializers.CharField(required=False, allow_blank=True)
-    district = serializers.CharField(required=False, allow_blank=True)
-    municipality = serializers.CharField(required=False, allow_blank=True)
-    ward_no = serializers.CharField(required=False, allow_blank=True)
-    street = serializers.CharField(required=False, allow_blank=True)
-    tole = serializers.CharField(required=False, allow_blank=True)
-    house_no = serializers.CharField(required=False, allow_blank=True)
-    postal_code = serializers.CharField(required=False, allow_blank=True)
+
+    country = serializers.CharField(required=True, allow_blank=False, allow_null=False)
+    province = serializers.CharField(required=True, allow_blank=False, allow_null=False)
+    district = serializers.CharField(required=True, allow_blank=False, allow_null=False)
+    municipality = serializers.CharField(required=True, allow_blank=False, allow_null=False)
+    ward_no = serializers.CharField(required=True, allow_blank=False, allow_null=False)
+
+    # ONLY THESE CAN BE NULL
+    street = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    tole = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    house_no = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    postal_code = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
     is_primary = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs):
+        # Convert allowed-nulls into "" to fit model (model uses blank=True, default="")
+        for k in ("street", "tole", "house_no", "postal_code"):
+            if attrs.get(k) is None:
+                attrs[k] = ""
+        return attrs
 
 
 class DocumentInputSerializer(serializers.Serializer):
     document_type = serializers.ChoiceField(choices=ProfileDocument._meta.get_field("document_type").choices)
-    file = serializers.UUIDField()  # UploadedFile UUID
-    issued_by = serializers.CharField(required=False, allow_blank=True)
+    file = serializers.UUIDField(allow_null=False, required=True)  # UploadedFile UUID
+
+    issued_by = serializers.CharField(required=False, allow_blank=True, allow_null=False)
+
+    # ONLY THESE CAN BE NULL
     issued_date = serializers.DateField(required=False, allow_null=True)
     expiry_date = serializers.DateField(required=False, allow_null=True)
-    remarks = serializers.CharField(required=False, allow_blank=True)
+
+    remarks = serializers.CharField(required=False, allow_blank=True, allow_null=False)
 
 
+# -----------------------------
+# Client/Profile create (ALL mandatory except allowed null fields above)
+# -----------------------------
 class AdminClientInfoCreateSerializer(serializers.Serializer):
-    user_id = serializers.UUIDField()
-    school_id = serializers.UUIDField()
+    user_id = serializers.UUIDField(required=True)
+    school_id = serializers.UUIDField(required=True)
 
-    # DOB: accept either AD or BS format; store AD
-    date_of_birth = serializers.CharField(required=False, allow_blank=True)
+    date_of_birth = serializers.CharField(required=True, allow_blank=False, allow_null=False)
     date_of_birth_type = serializers.ChoiceField(
         choices=[("ad", "AD"), ("bs", "BS")],
-        required=False,
-        default="ad",
+        required=True,
+        allow_null=False,
     )
 
-    gender = serializers.CharField(required=False, allow_blank=True)
-    blood_group = serializers.CharField(required=False, allow_blank=True)
-    nationality = serializers.CharField(required=False, allow_blank=True)
-    religion = serializers.CharField(required=False, allow_blank=True)
-    mother_tongue = serializers.CharField(required=False, allow_blank=True)
-    citizenship_no = serializers.CharField(required=False, allow_blank=True)
-    pan_no = serializers.CharField(required=False, allow_blank=True)
-    extra = serializers.JSONField(required=False)
+    gender = serializers.CharField(required=True, allow_blank=False, allow_null=False)
+    blood_group = serializers.CharField(required=True, allow_blank=False, allow_null=False)
 
-    # multiple addresses
+    nationality = serializers.CharField(required=True, allow_blank=False, allow_null=False)
+    religion = serializers.CharField(required=True, allow_blank=False, allow_null=False)
+    mother_tongue = serializers.CharField(required=True, allow_blank=False, allow_null=False)
+
+    citizenship_no = serializers.CharField(required=True, allow_blank=False, allow_null=False)
+    pan_no = serializers.CharField(required=True, allow_blank=False, allow_null=False)
+
     addresses = AddressInputSerializer(many=True, allow_empty=False)
-
-    # typed documents
     documents = DocumentInputSerializer(many=True, allow_empty=False)
 
+    def validate_gender(self, value: str):
+        v = (value or "").strip().lower()
+        mapping = {
+            "male": Gender.MALE,
+            "female": Gender.FEMALE,
+            "other": Gender.OTHER,
+        }
+        if v not in mapping:
+            raise serializers.ValidationError("Invalid gender. Use Male/Female/Other.")
+        return mapping[v]
+
+    def validate_blood_group(self, value: str):
+        v = (value or "").strip()
+        allowed = {c[0] for c in BloodGroup.choices}
+        if v not in allowed:
+            raise serializers.ValidationError(f"Invalid blood_group. Allowed: {sorted(allowed)}")
+        return v
+
     def validate(self, attrs):
+        # ---- null detection (only allowed nulls already handled in nested serializers)
+        null_fields = []
+
+        # top-level fields cannot be null
+        for k in (
+            "user_id", "school_id",
+            "date_of_birth", "date_of_birth_type",
+            "gender", "blood_group",
+            "nationality", "religion", "mother_tongue",
+            "citizenship_no", "pan_no",
+            "addresses", "documents",
+        ):
+            if k in attrs and attrs[k] is None:
+                null_fields.append(k)
+
+        if null_fields:
+            raise serializers.ValidationError({k: "This field cannot be null." for k in null_fields})
+
+        # ---- DOB format check
         dob_raw = (attrs.get("date_of_birth") or "").strip()
         dob_type = attrs.get("date_of_birth_type", "ad")
 
-        if dob_raw:
-            try:
-                if dob_type == "ad":
-                    datetime.datetime.strptime(dob_raw, "%Y-%m-%d")
-                else:
-                    _ = bs_to_ad_date(dob_raw)  # validate BS date by converting
-            except Exception:
-                raise serializers.ValidationError(
-                    {"date_of_birth": "Invalid date format. Use YYYY-MM-DD. If bs, ensure valid Nepali date."}
-                )
+        try:
+            if dob_type == "ad":
+                datetime.datetime.strptime(dob_raw, "%Y-%m-%d")
+            else:
+                _ = bs_to_ad_date(dob_raw)
+        except Exception:
+            raise serializers.ValidationError(
+                {"date_of_birth": "Invalid date format. Use YYYY-MM-DD. If bs, ensure valid Nepali date."}
+            )
 
         # only 1 primary
         primaries = [a for a in attrs["addresses"] if a.get("is_primary")]
@@ -185,18 +317,18 @@ class ProfileReadSerializer(serializers.ModelSerializer):
         model = Profile
         fields = [
             "id", "school", "user",
-            "date_of_birth",           # stored AD
-            "date_of_birth_type",      # tells stored type
-            "date_of_birth_display",   # bs/ad based on context
+            "date_of_birth",
+            "date_of_birth_type",
+            "date_of_birth_display",
             "gender", "blood_group",
             "nationality", "religion", "mother_tongue",
-            "citizenship_no", "pan_no", "extra",
+            "citizenship_no", "pan_no",
             "addresses", "documents",
             "created_at", "updated_at",
         ]
 
     def get_date_of_birth_type(self, obj: Profile):
-        return "ad"  # stored as AD always
+        return "ad"
 
     def get_date_of_birth_display(self, obj: Profile):
         if not obj.date_of_birth:
@@ -221,7 +353,6 @@ class SchoolReadSerializer(serializers.ModelSerializer):
             "logo_file",
             "pan_number", "registration_number",
             "pan_document_file", "registration_document_file",
-            "user_photo", "citizenship_front", "citizenship_back",
             "is_active", "created_at",
         ]
 

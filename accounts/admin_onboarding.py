@@ -69,9 +69,6 @@ class AdminPersonalInfoCreateView(APIView):
 
         user = create_admin_user(**ser.validated_data)
 
-        # Trigger SMTP task here if you want:
-        # send_admin_password_email.delay(user_id=str(user.id), password=user._temp_password)
-
         return Response(
             {
                 "user_id": str(user.id),
@@ -189,27 +186,23 @@ class AdminClientInfoCreateView(APIView):
         school = get_object_or_404(School, pk=ser.validated_data["school_id"])
 
         profile_data = {
-            "date_of_birth": ser.validated_data.get("date_of_birth"),
-            "gender": ser.validated_data.get("gender", ""),
-            "blood_group": ser.validated_data.get("blood_group", ""),
-            "nationality": ser.validated_data.get("nationality", ""),
-            "religion": ser.validated_data.get("religion", ""),
-            "mother_tongue": ser.validated_data.get("mother_tongue", ""),
-            "citizenship_no": ser.validated_data.get("citizenship_no", ""),
-            "pan_no": ser.validated_data.get("pan_no", ""),
-            "extra": ser.validated_data.get("extra") or {},
+            "date_of_birth": ser.validated_data["date_of_birth"],
+            "gender": ser.validated_data["gender"],
+            "blood_group": ser.validated_data["blood_group"],
+            "nationality": ser.validated_data["nationality"],
+            "religion": ser.validated_data["religion"],
+            "mother_tongue": ser.validated_data["mother_tongue"],
+            "citizenship_no": ser.validated_data["citizenship_no"],
+            "pan_no": ser.validated_data["pan_no"],
         }
-
-        addresses_data = ser.validated_data["addresses"]
-        documents_data = ser.validated_data["documents"]
 
         profile = create_profile_bundle(
             user=user,
             school=school,
             profile_data=profile_data,
-            addresses_data=addresses_data,
-            documents_data=documents_data,
-            date_of_birth_type=ser.validated_data.get("date_of_birth_type", "ad"),
+            addresses_data=ser.validated_data["addresses"],
+            documents_data=ser.validated_data["documents"],
+            date_of_birth_type=ser.validated_data["date_of_birth_type"],
             replace_documents=False,
         )
 
@@ -228,9 +221,7 @@ class AdminClientInfoCreateView(APIView):
     responses={
         200: OpenApiResponse(
             response=dict,
-            examples=[
-                OpenApiExample("Updated", value={"profile_id": "...", "message": "Client info updated (upsert)."})
-            ],
+            examples=[OpenApiExample("Updated", value={"profile_id": "...", "message": "Client info updated (upsert)."})],
         )
     },
 )
@@ -248,28 +239,24 @@ class AdminClientInfoUpdateView(APIView):
         school = get_object_or_404(School, pk=ser.validated_data["school_id"])
 
         profile_data = {
-            "date_of_birth": ser.validated_data.get("date_of_birth"),
-            "gender": ser.validated_data.get("gender", ""),
-            "blood_group": ser.validated_data.get("blood_group", ""),
-            "nationality": ser.validated_data.get("nationality", ""),
-            "religion": ser.validated_data.get("religion", ""),
-            "mother_tongue": ser.validated_data.get("mother_tongue", ""),
-            "citizenship_no": ser.validated_data.get("citizenship_no", ""),
-            "pan_no": ser.validated_data.get("pan_no", ""),
-            "extra": ser.validated_data.get("extra") or {},
+            "date_of_birth": ser.validated_data["date_of_birth"],
+            "gender": ser.validated_data["gender"],
+            "blood_group": ser.validated_data["blood_group"],
+            "nationality": ser.validated_data["nationality"],
+            "religion": ser.validated_data["religion"],
+            "mother_tongue": ser.validated_data["mother_tongue"],
+            "citizenship_no": ser.validated_data["citizenship_no"],
+            "pan_no": ser.validated_data["pan_no"],
         }
-
-        addresses_data = ser.validated_data["addresses"]
-        documents_data = ser.validated_data["documents"]
 
         profile = create_profile_bundle(
             user=user,
             school=school,
             profile_data=profile_data,
-            addresses_data=addresses_data,
-            documents_data=documents_data,
-            date_of_birth_type=ser.validated_data.get("date_of_birth_type", "ad"),
-            replace_documents=False,  # change to True if PUT should overwrite docs
+            addresses_data=ser.validated_data["addresses"],
+            documents_data=ser.validated_data["documents"],
+            date_of_birth_type=ser.validated_data["date_of_birth_type"],
+            replace_documents=False,  # set True if PUT should overwrite docs
         )
 
         return Response(

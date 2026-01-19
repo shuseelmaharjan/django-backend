@@ -12,7 +12,8 @@ from schools.models import School
 from profiles.models import Profile, Address, ProfileDocument
 
 import nepali_datetime
-
+from django.core.exceptions import ValidationError as DjangoValidationError
+from rest_framework.exceptions import ValidationError as DRFValidationError
 
 def generate_temp_password(length: int = 12) -> str:
     alphabet = string.ascii_letters + string.digits + "!@#$%^&*_-"
@@ -49,25 +50,29 @@ def create_admin_user(
 
 @transaction.atomic
 def create_school_for_admin(*, owner: User, code: str, name: str, **kwargs) -> School:
-    school = School.objects.create(
-        owner=owner,
-        code=code,
-        name=name,
-        address=kwargs.get("address", ""),
-        phone=kwargs.get("phone", ""),
-        email=kwargs.get("email", ""),
-        logo_file=kwargs.get("logo_file"),
-        pan_number=kwargs.get("pan_number", ""),
-        registration_number=kwargs.get("registration_number", ""),
-        pan_document_file=kwargs.get("pan_document_file"),
-        registration_document_file=kwargs.get("registration_document_file"),
-        user_photo=kwargs.get("user_photo"),
-        citizenship_front=kwargs.get("citizenship_front"),
-        citizenship_back=kwargs.get("citizenship_back"),
-        is_active=kwargs.get("is_active", True),
-    )
-    return school
+    try:
+        school = School.objects.create(
+            owner=owner,
+            code=code,
+            name=name,
+            address=kwargs["address"],
+            phone=kwargs["phone"],
+            email=kwargs["email"],
+            logo_file=kwargs["logo_file"],
+            pan_number=kwargs["pan_number"],
+            registration_number=kwargs["registration_number"],
+            pan_document_file=kwargs["pan_document_file"],
+            registration_document_file=kwargs["registration_document_file"],
+            is_active=kwargs["is_active"],
+        )
+        return school
 
+    except DjangoValidationError as e:
+        # Convert Django model validation errors into DRF 400 response
+        # e.message_dict is best if available
+        if hasattr(e, "message_dict"):
+            raise DRFValidationError(e.message_dict)
+        raise DRFValidationError({"detail": e.messages})
 
 # -----------------------------
 # DOB normalize to AD
@@ -125,7 +130,7 @@ def create_profile_bundle(
         setattr(profile, k, v)
     profile.save()
 
-    # upsert multiple addresses by (profile, address_type)
+    # upsert addresses by (profile, address_type)
     for addr in addresses_data:
         if "address_type" not in addr:
             raise ValueError("Each address must include address_type")
@@ -136,17 +141,17 @@ def create_profile_bundle(
             defaults=addr,
         )
 
-    # enforce single primary (if any primary provided)
+    # enforce single primary
     primaries = [a for a in addresses_data if a.get("is_primary")]
     if len(primaries) == 1:
         primary_type = primaries[0]["address_type"]
         Address.objects.filter(profile=profile).exclude(address_type=primary_type).update(is_primary=False)
 
-    # replace docs if asked (useful on PUT)
+    # replace docs if asked
     if replace_documents:
         ProfileDocument.objects.filter(profile=profile).delete()
 
-    # create documents
+    # create documents (no upsert; allow multiple per type)
     for doc in documents_data:
         if "document_type" not in doc or "file" not in doc:
             raise ValueError("Each document must include document_type and file")
@@ -154,7 +159,7 @@ def create_profile_bundle(
         ProfileDocument.objects.create(
             profile=profile,
             document_type=doc["document_type"],
-            file_id=doc["file"],  # expects UUID (UploadedFile id)
+            file_id=doc["file"],
             issued_by=doc.get("issued_by", ""),
             issued_date=doc.get("issued_date"),
             expiry_date=doc.get("expiry_date"),
