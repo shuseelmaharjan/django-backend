@@ -61,21 +61,13 @@ INSTALLED_APPS = [
     'django_filters',
 
     'accounts',
+    'common',
+    'profiles',
+    'schools',
+    'academics',
     'startup.apps.StartupConfig',
     'authx.apps.AuthxConfig',
-
-    'organization',
-    'academics',
-    'students',
-    'staff',
-    'enrollment',
-    'fees',
-    'billing',
-    'assessments',
-    'communication',
-    'reporting',
     'filehandler',
-    'payroll',
 ]
 
 
@@ -84,8 +76,6 @@ AUTH_USER_MODEL = "accounts.User"
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
-    "common.middleware.SchoolContextMiddleware",
-    "common.middleware.SchoolContextMiddleware",
     "authx.middleware.AttachNewAccessTokenMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -230,20 +220,6 @@ SPECTACULAR_SETTINGS = {
         {"name": "META File Handler", "description": "Uploads"},
         {"name": "META Startup", "description": "Bootstrap / health / seed endpoints"},
         {"name": "01. Auth", "description": "Login / Refresh / Me / Logout"},
-        {"name": "02. Organization", "description": "Schools, Campus, Settings"},
-        {"name": "03. Roles & Permissions", "description": "Roles and Role assignments"},
-        {"name": "04. Academic Setup", "description": "Academic years, classes, sections"},
-        {"name": "05. Students (Admission)", "description": "Student profile, guardians, addresses, documents"},
-        {"name": "06. Enrollment & Promotion", "description": "Enrollments, promotions"},
-        {"name": "07. Staff", "description": "Staff profiles, teachers, assignments"},
-        {"name": "08. Fees", "description": "Fee heads, plans, rules, charges"},
-        {"name": "09. Billing", "description": "Invoices, payments, receipts"},
-        {"name": "10. Staff Attendance", "description": "Staff attendance marking & reports"},
-        {"name": "11. Communication", "description": "Notices and message logs"},
-        {"name": "12. Assessments (Subjects)", "description": "Subjects"},
-        {"name": "13. Assessments Core", "description": "Question bank, questions, choices"},
-        {"name": "14. Online Tests", "description": "Tests, test questions, publish"},
-        {"name": "15. Attempts & Evaluation", "description": "Attempts, answers, submit, evaluate"},
     ],
 }
 

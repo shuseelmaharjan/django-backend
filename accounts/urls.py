@@ -1,17 +1,28 @@
-# accounts/urls.py
 from django.urls import path
-from .views import (
-    ChangePasswordView,
-    ProfileGetView,
+
+from accounts.admin_onboarding import (
+    AdminPersonalInfoCreateView,
+    AdminPersonalInfoUpdateView,
+    AdminSchoolInfoCreateView,
+    AdminSchoolInfoUpdateView,
+    AdminClientInfoCreateView,
+    AdminClientInfoUpdateView,
+    AdminListView,
+    AdminDetailView,
+    AdminDeleteView,
 )
 
 urlpatterns = [
-    path("change-password/", ChangePasswordView.as_view(), name="authx-change-password"),
-    # 1 GET
-    path("my-profile/", ProfileGetView.as_view(), name="authx-profile-get"),
+    path("create-admin/personal-info/", AdminPersonalInfoCreateView.as_view()),
+    path("create-admin/personal-info/<uuid:user_id>/", AdminPersonalInfoUpdateView.as_view()),
 
-    # 3 POST (separate)
-    # path("change-email/", UpdateEmailView.as_view(), name="authx-profile-update-email"),
-    # path("change-username/", UpdateUsernameView.as_view(), name="authx-profile-update-username"),
-    # path("change-phone/", UpdatePhoneView.as_view(), name="authx-profile-update-phone"),
+    path("create-admin/school-info/", AdminSchoolInfoCreateView.as_view()),
+    path("create-admin/school-info/<uuid:school_id>/", AdminSchoolInfoUpdateView.as_view()),
+
+    path("create-admin/client-info/", AdminClientInfoCreateView.as_view()),
+    path("create-admin/client-info/<uuid:user_id>/", AdminClientInfoUpdateView.as_view()),
+
+    path("admins/", AdminListView.as_view()),
+    path("admins/<uuid:pk>/", AdminDetailView.as_view()),
+    path("admins/<uuid:user_id>/delete/", AdminDeleteView.as_view()),
 ]

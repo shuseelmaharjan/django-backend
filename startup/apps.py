@@ -30,25 +30,33 @@ class StartupConfig(AppConfig):
             if User.objects.filter(is_superuser=True).exists():
                 return
 
-            email = os.environ.get("DEFAULT_ADMIN_EMAIL", "").strip().lower()
+            phone = os.environ.get("DEFAULT_ADMIN_PHONE", "").strip()
             password = os.environ.get("DEFAULT_ADMIN_PASSWORD", "")
-            phone = os.environ.get("DEFAULT_ADMIN_PHONE", "")
-            first_name = os.environ.get("DEFAULT_ADMIN_FIRST_NAME", "")
-            last_name = os.environ.get("DEFAULT_ADMIN_LAST_NAME", "")
 
-            if not email or not password:
-                logger.warning("Admin seed skipped: email or password missing in env.")
+            # optional fields
+            email = os.environ.get("DEFAULT_ADMIN_EMAIL", "").strip().lower()
+            first_name = os.environ.get("DEFAULT_ADMIN_FIRST_NAME", "").strip()
+            middle_name = os.environ.get("DEFAULT_ADMIN_MIDDLE_NAME", "").strip()
+            last_name = os.environ.get("DEFAULT_ADMIN_LAST_NAME", "").strip()
+
+            if not phone or not password:
+                logger.warning("Admin seed skipped: phone or password missing in env.")
                 return
 
-            User.objects.create_superuser(
-                email=email,
-                password=password,
+            su = User.objects.create_superuser(
                 phone=phone,
+                password=password,
+                email=email,
                 first_name=first_name,
                 last_name=last_name,
             )
 
-            logger.info("Seeded default super admin: %s", email)
+            # middle_name isn't in AbstractUser; it's your custom field
+            if middle_name:
+                su.middle_name = middle_name
+                su.save(update_fields=["middle_name"])
+
+            logger.info("Seeded default super admin phone=%s", phone)
 
         except (OperationalError, ProgrammingError):
             # DB not ready (migrations not applied)
