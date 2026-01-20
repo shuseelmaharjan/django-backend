@@ -67,6 +67,8 @@ COUNTRY_DATA = [
         "dial_code": "+977",
         "phone_length": 10,
         "tel_length": 7,
+        "tel-startswith": ["01"],
+        "phone-startswith": ["98", "97"]
     },
     {
         "country": "India",
@@ -75,29 +77,5 @@ COUNTRY_DATA = [
         "dial_code": "+91",
         "phone_length": 10,
         "tel_length": 7,
-    },
-    {
-        "country": "United States",
-        "country_code": "US",
-        "currency": "USD",
-        "dial_code": "+1",
-        "phone_length": 10,
-        "tel_length": 7,
-    },
-    {
-        "country": "Canada",
-        "country_code": "CA",
-        "currency": "CAD",
-        "dial_code": "+1",
-        "phone_length": 10,
-        "tel_length": 7,
-    },
-    {
-        "country": "Australia",
-        "country_code": "AU",
-        "currency": "AUD",
-        "dial_code": "+61",
-        "phone_length": 9,
-        "tel_length": 6,
     },
 ]

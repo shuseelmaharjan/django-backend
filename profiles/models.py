@@ -36,7 +36,8 @@ class GuardianRelation(models.TextChoices):
 
 class DocumentType(models.TextChoices):
     PHOTO = "photo", _("Photo")
-    CITIZENSHIP = "citizenship", _("Citizenship")
+    CITIZENSHIP_FRONT = "citizenship_front", _("Citizenship Front")
+    CITIZENSHIP_BACK = "citizenship_back", _("Citizenship Back")
     BIRTH_CERTIFICATE = "birth_certificate", _("Birth Certificate")
     PAN = "pan", _("PAN")
     PASSPORT = "passport", _("Passport")
@@ -72,9 +73,6 @@ class Profile(models.Model):
     # Nepal common IDs (optional)
     citizenship_no = models.CharField(max_length=80, blank=True, default="")
     pan_no = models.CharField(max_length=40, blank=True, default="")
-
-    # extra custom fields per school later (flexible)
-    extra = models.JSONField(default=dict, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

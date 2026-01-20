@@ -61,31 +61,6 @@ class School(models.Model):
         help_text="Registration document scan",
     )
 
-    # Optional: principal photo / citizenship at school level
-    # (Often better stored in profiles.Profile + ProfileDocument, but keeping here since you asked)
-    user_photo = models.ForeignKey(
-        "filehandler.UploadedFile",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-    )
-
-    citizenship_front = models.ForeignKey(
-        "filehandler.UploadedFile",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-    )
-    citizenship_back = models.ForeignKey(
-        "filehandler.UploadedFile",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-    )
-
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
