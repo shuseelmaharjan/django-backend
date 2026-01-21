@@ -3,7 +3,7 @@ from rest_framework import serializers
 from accounts.models import User
 from schools.models import School
 from profiles.models import Profile, Address, ProfileDocument, Gender, BloodGroup
-
+from filehandler.serializers import UploadedFileSerializer
 import datetime
 import nepali_datetime
 
@@ -292,6 +292,7 @@ class AdminClientInfoCreateSerializer(serializers.Serializer):
 # Read serializers
 # -----------------------------
 class ProfileDocumentReadSerializer(serializers.ModelSerializer):
+    file = UploadedFileSerializer(read_only=True)
     class Meta:
         model = ProfileDocument
         fields = ["id", "document_type", "file", "issued_by", "issued_date", "expiry_date", "remarks", "created_at"]
@@ -345,6 +346,9 @@ class ProfileReadSerializer(serializers.ModelSerializer):
 
 
 class SchoolReadSerializer(serializers.ModelSerializer):
+    logo_file = UploadedFileSerializer(read_only=True)
+    pan_document_file = UploadedFileSerializer(read_only=True)
+    registration_document_file = UploadedFileSerializer(read_only=True)
     class Meta:
         model = School
         fields = [
