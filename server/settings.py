@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     'startup.apps.StartupConfig',
     'authx.apps.AuthxConfig',
     'filehandler',
+    'locations',
 ]
 
 
