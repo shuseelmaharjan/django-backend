@@ -69,6 +69,7 @@ INSTALLED_APPS = [
     'authx.apps.AuthxConfig',
     'filehandler',
     'locations',
+    'onboarding',
 ]
 
 
