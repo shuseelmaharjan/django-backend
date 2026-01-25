@@ -133,14 +133,19 @@ class AdminSchoolInfoUpdateSerializer(serializers.ModelSerializer):
     If you want UPDATE also mandatory, keep same rules.
     If you want partial update later, change required=False per field.
     """
+    logo_file_url = serializers.SerializerMethodField(read_only=True)
+    pan_document_file_url = serializers.SerializerMethodField(read_only=True)
+    registration_document_file_url = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = School
         fields = [
             "code", "name",
             "address", "phone", "email",
-            "logo_file",
+            "logo_file", "logo_file_url",
             "pan_number", "registration_number",
-            "pan_document_file", "registration_document_file",
+            "pan_document_file", "pan_document_file_url",
+            "registration_document_file", "registration_document_file_url",
             "is_active",
         ]
         extra_kwargs = {
@@ -156,6 +161,27 @@ class AdminSchoolInfoUpdateSerializer(serializers.ModelSerializer):
             "registration_document_file": {"required": True, "allow_null": False},
             "is_active": {"required": True},
         }
+
+    def get_logo_file_url(self, obj):
+        if not obj.logo_file or not obj.logo_file.file:
+            return None
+        request = self.context.get("request")
+        url = obj.logo_file.file.url
+        return request.build_absolute_uri(url) if request else url
+
+    def get_pan_document_file_url(self, obj):
+        if not obj.pan_document_file or not obj.pan_document_file.file:
+            return None
+        request = self.context.get("request")
+        url = obj.pan_document_file.file.url
+        return request.build_absolute_uri(url) if request else url
+
+    def get_registration_document_file_url(self, obj):
+        if not obj.registration_document_file or not obj.registration_document_file.file:
+            return None
+        request = self.context.get("request")
+        url = obj.registration_document_file.file.url
+        return request.build_absolute_uri(url) if request else url
 
     def validate_phone(self, value):
         return validate_nepal_phone_or_tel(value)

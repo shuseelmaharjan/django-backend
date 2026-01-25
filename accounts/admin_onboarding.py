@@ -28,6 +28,7 @@ from accounts.serializers.admin_onboarding import (
     AdminSchoolInfoUpdateSerializer,
     AdminClientInfoCreateSerializer,
     AdminBundleReadSerializer,
+    ProfileReadSerializer, SchoolReadSerializer,
 )
 
 from drf_spectacular.utils import (
@@ -99,6 +100,13 @@ class AdminPersonalInfoUpdateView(APIView):
         dob_display = request.query_params.get("dob_display", "bs")
         return Response(AdminBundleReadSerializer(user, context={"dob_display": dob_display}).data)
 
+    def get(self, request, user_id):
+        user = get_object_or_404(User, pk=user_id)
+
+
+        dob_display = request.query_params.get("dob_display", "bs")
+        return Response(AdminBundleReadSerializer(user, context={"dob_display": dob_display}).data)
+
 
 @extend_schema(
     tags=["Admin Onboarding"],
@@ -151,9 +159,14 @@ class AdminSchoolInfoUpdateView(APIView):
 
     def put(self, request, school_id):
         school = get_object_or_404(School, pk=school_id)
-        ser = AdminSchoolInfoUpdateSerializer(instance=school, data=request.data)
+        ser = AdminSchoolInfoUpdateSerializer(instance=school, data=request.data, context={'request': request})
         ser.is_valid(raise_exception=True)
         ser.save()
+        return Response(ser.data)
+
+    def get(self, request, school_id):
+        school = get_object_or_404(School, pk=school_id)
+        ser = SchoolReadSerializer(instance=school, context={'request': request})
         return Response(ser.data)
 
 
@@ -249,20 +262,28 @@ class AdminClientInfoUpdateView(APIView):
             "pan_no": ser.validated_data["pan_no"],
         }
 
-        profile = create_profile_bundle(
+        create_profile_bundle(
             user=user,
             school=school,
             profile_data=profile_data,
             addresses_data=ser.validated_data["addresses"],
             documents_data=ser.validated_data["documents"],
             date_of_birth_type=ser.validated_data["date_of_birth_type"],
-            replace_documents=False,  # set True if PUT should overwrite docs
+            replace_documents=False,
         )
 
+        dob_display = request.query_params.get("dob_display", "bs")
         return Response(
-            {"profile_id": str(profile.id), "message": "Client info updated (upsert)."},
+            AdminBundleReadSerializer(user, context={"dob_display": dob_display}).data,
             status=status.HTTP_200_OK,
         )
+
+    def get(self, request, user_id):
+        user = get_object_or_404(User, pk=user_id)
+
+        dob_display = request.query_params.get("dob_display", "bs")
+        return Response(AdminBundleReadSerializer(user, context={"dob_display": dob_display}).data)
+
 
 
 @extend_schema(
