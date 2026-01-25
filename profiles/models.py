@@ -62,7 +62,8 @@ class Profile(models.Model):
     school = models.ForeignKey("schools.School", on_delete=models.CASCADE, related_name="profiles")
     user = models.OneToOneField("accounts.User", on_delete=models.CASCADE, related_name="profile")
 
-    date_of_birth = models.DateField(null=True, blank=True)
+    date_of_birth_in_ad = models.DateField(null=True, blank=True)
+    date_of_birth_in_bs = models.CharField(max_length=10, blank=True, default="")
     gender = models.CharField(max_length=10, choices=Gender.choices, blank=True, default="")
     blood_group = models.CharField(max_length=10, choices=BloodGroup.choices, default=BloodGroup.UNKNOWN)
 

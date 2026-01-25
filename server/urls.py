@@ -40,7 +40,8 @@ urlpatterns = [
     path("api/startup/", include("startup.urls")),
     path("api/", include("filehandler.urls")),
     path("api/v1/accounts/", include("accounts.urls")),
-    path("api/", include("locations.urls"))
+    path("api/", include("locations.urls")),
+    path("api/onboarding/", include("onboarding.urls")),
 
 
 

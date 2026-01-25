@@ -3,9 +3,9 @@ import uuid
 
 from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
-from django.utils.translation import gettext_lazy as _
 from common.constants import UserStatus, UserRole
-
+from common.models import SoftDeleteModel
+from django.db.models import Q
 
 def _gen_username_from_phone(phone: str) -> str:
     # simple default: "u_<last 8 digits>"
@@ -52,7 +52,7 @@ class UserManager(BaseUserManager):
         return self.create_user(phone=phone, password=password, **extra_fields)
 
 
-class User(AbstractUser):
+class User(SoftDeleteModel, AbstractUser):
     """
     Phone-based login user model.
 
@@ -135,3 +135,22 @@ class User(AbstractUser):
     def __str__(self):
         full = " ".join([self.first_name, self.middle_name, self.last_name]).strip()
         return full or self.phone
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["phone"],
+                condition=Q(is_deleted=False),
+                name="uq_user_phone_alive",
+            ),
+            models.UniqueConstraint(
+                fields=["email"],
+                condition=Q(is_deleted=False) & ~Q(email=""),
+                name="uq_user_email_alive",
+            ),
+            models.UniqueConstraint(
+                fields=["username"],
+                condition=Q(is_deleted=False) & ~Q(username=""),
+                name="uq_user_username_alive",
+            ),
+        ]
