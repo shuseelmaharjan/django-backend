@@ -127,7 +127,10 @@ class AdminOnboardingViewSet(
         serializer = AdminOnboardingCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         result = serializer.save()
-        return Response(result, status=status.HTTP_201_CREATED)
+        return Response({
+            "message": "Admin onboarding created successfully.",
+            "data": result,
+        }, status=status.HTTP_201_CREATED)
 
     def get_queryset(self):
         from accounts.models import User
@@ -186,10 +189,18 @@ class AdminOnboardingViewSet(
 
         bundle = update_onboarding_bundle_by_user(
             user_id=user_id,
+            request=request,
             validated_data=serializer.validated_data,
             partial=False,
         )
-        return Response(bundle, status=status.HTTP_200_OK)
+
+        return Response(
+            {
+                "message": "Onboarding updated successfully.",
+                "data": bundle,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     def partial_update(self, request, *args, **kwargs):
         user_id = kwargs["pk"]
@@ -198,12 +209,22 @@ class AdminOnboardingViewSet(
 
         bundle = update_onboarding_bundle_by_user(
             user_id=user_id,
+            request=request,
             validated_data=serializer.validated_data,
             partial=True,
         )
-        return Response(bundle, status=status.HTTP_200_OK)
+
+        return Response(
+            {
+                "message": "Onboarding partially updated successfully.",
+                "data": bundle,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     def destroy(self, request, *args, **kwargs):
         user_id = kwargs["pk"]
         delete_onboarding_bundle_by_user(user_id=user_id)
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response({
+            "message": "Onboarding deleted successfully.",
+        }, status=status.HTTP_204_NO_CONTENT)

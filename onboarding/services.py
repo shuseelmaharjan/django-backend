@@ -390,7 +390,13 @@ def fetch_onboarding_bundle_by_user(*, user_id: str, request, allow_incomplete: 
 # -----------------------
 
 @transaction.atomic
-def update_onboarding_bundle_by_user(*, user_id: str, validated_data: Dict[str, Any], partial: bool) -> Dict[str, Any]:
+def update_onboarding_bundle_by_user(
+    *,
+    user_id: str,
+    request,
+    validated_data: Dict[str, Any],
+    partial: bool,
+) -> Dict[str, Any]:
     user = _get_admin_user_or_404(user_id=user_id)
     school = _get_school_for_owner_or_error(owner=user)
 
@@ -535,7 +541,11 @@ def update_onboarding_bundle_by_user(*, user_id: str, validated_data: Dict[str, 
         if missing:
             raise serializers.ValidationError({"documents": {k: ["Missing required document."] for k in missing}})
 
-    return fetch_onboarding_bundle_by_user(user_id=str(user.id), allow_incomplete=True)
+    return fetch_onboarding_bundle_by_user(
+        user_id=str(user.id),
+        request=request,
+        allow_incomplete=True,
+    )
 
 
 @transaction.atomic
