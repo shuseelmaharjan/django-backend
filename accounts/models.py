@@ -132,6 +132,12 @@ class User(SoftDeleteModel, AbstractUser):
 
         super().save(*args, **kwargs)
 
+    def soft_delete(self, *args, **kwargs):
+        self.status = UserStatus.DELETED
+        self.is_active = False
+        self.save(update_fields=["status", "is_active"])
+        return super().soft_delete(*args, **kwargs)
+
     def __str__(self):
         full = " ".join([self.first_name, self.middle_name, self.last_name]).strip()
         return full or self.phone

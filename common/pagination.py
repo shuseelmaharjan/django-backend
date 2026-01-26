@@ -30,8 +30,11 @@ class MetaPageNumberPagination(PageNumberPagination):
         return self.page_size
 
     def get_paginated_response(self, data):
+        # Ensure numeric page size for serial calc
+        page_size = self.get_page_size(self.request) or self.page_size or 10
+
         # add serial number globally (based on pagination offset)
-        start_index = (self.page.number - 1) * self.get_page_size(self.request)
+        start_index = (self.page.number - 1) * page_size
         for i, item in enumerate(data, start=1):
             if isinstance(item, dict):
                 item["serial"] = start_index + i
@@ -40,7 +43,7 @@ class MetaPageNumberPagination(PageNumberPagination):
 
         meta = {
             "page": self.page.number,
-            "page_size": self.get_page_size(self.request),
+            "page_size": page_size,
 
             # expose dropdown info
             "page_size_param": self.page_size_query_param,

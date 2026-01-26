@@ -23,6 +23,8 @@ class UserStatus(models.TextChoices):
     SUSPENDED = "suspended", "Suspended"
     LOCKED = "locked", "Locked"
     DELETED = "deleted", "Deleted"
+    INACTIVE = "inactive", "Inactive"
+
 
 
 class StudentStatus(models.TextChoices):
