@@ -48,11 +48,19 @@ def _generate_unique_username(first: str, middle: str, last: str) -> str:
     return make_unique_username(base, _username_exists_any)
 
 
-def _get_admin_user_or_404(*, user_id: str) -> User:
-    user = get_object_or_404(User.objects, id=user_id)  # alive only
+def _get_admin_user_or_404(*, user_id: str, include_deleted: bool = False) -> User:
+    """
+    include_deleted:
+      - False: only alive users (User.objects)
+      - True: include soft-deleted users (User.all_objects)
+    """
+    manager = User.all_objects if include_deleted else User.objects
+    user = get_object_or_404(manager, id=user_id)
+
     if user.is_superuser or getattr(user, "role", None) != UserRole.ADMIN:
         raise serializers.ValidationError({"user_id": ["User is not an ADMIN."]})
     return user
+
 
 
 def _get_school_for_owner_or_error(*, owner: User) -> School:
@@ -260,12 +268,25 @@ def onboard_admin_user_and_school(*, validated_data: Dict[str, Any]) -> Dict[str
 # READ bundle (by user)
 # -----------------------
 
-def fetch_onboarding_bundle_by_user(*, user_id: str, request, allow_incomplete: bool = True) -> Dict[str, Any]:
-    user = _get_admin_user_or_404(user_id=user_id)
+def fetch_onboarding_bundle_by_user(
+    *,
+    user_id: str,
+    request,
+    allow_incomplete: bool = True,
+    include_deleted: bool = False,  # ✅ NEW
+) -> Dict[str, Any]:
+    # ✅ user may be deleted only when include_deleted=True
+    user = _get_admin_user_or_404(user_id=user_id, include_deleted=include_deleted)
+
+    # ✅ School might be soft deletable in your system; if you have School.all_objects use it.
+    school_manager = getattr(School, "all_objects", None) if include_deleted else School.objects
+    if school_manager is None:
+        # fallback if School has no all_objects
+        school_manager = School.objects
 
     # ✅ select_related file FKs
     school = (
-        School.objects
+        school_manager
         .select_related("logo_file", "pan_document_file", "registration_document_file")
         .filter(owner=user)
         .order_by("-created_at")
@@ -275,7 +296,9 @@ def fetch_onboarding_bundle_by_user(*, user_id: str, request, allow_incomplete: 
     # ✅ no school -> return incomplete but still stable shape
     if not school:
         if not allow_incomplete:
-            raise serializers.ValidationError({"school": {"non_field_errors": ["School not found for this admin user."]}})
+            raise serializers.ValidationError(
+                {"school": {"non_field_errors": ["School not found for this admin user."]}}
+            )
         return {
             "user": {
                 "id": str(user.id),
@@ -294,30 +317,58 @@ def fetch_onboarding_bundle_by_user(*, user_id: str, request, allow_incomplete: 
             "documents": {k: None for k in REQUIRED_DOC_MAP.keys()},
         }
 
+    # ✅ Profile might also be soft deletable; same pattern
+    profile_manager = getattr(Profile, "all_objects", None) if include_deleted else Profile.objects
+    if profile_manager is None:
+        profile_manager = Profile.objects
+
     profile = (
-        Profile.objects
+        profile_manager
         .filter(school=school, user=user)
         .prefetch_related("addresses")
         .first()
     )
 
     if not profile and not allow_incomplete:
-        raise serializers.ValidationError({"profile": {"non_field_errors": ["Profile not found for school owner."]}})
+        raise serializers.ValidationError(
+            {"profile": {"non_field_errors": ["Profile not found for school owner."]}}
+        )
 
     addresses = []
     docs_by_type: Dict[str, Any] = {}
 
     if profile:
-        addresses = list(profile.addresses.all().values(
-            "id", "address_type", "country", "province", "district", "municipality",
-            "ward_no", "street", "tole", "house_no", "postal_code", "is_primary"
-        ))
+        # Address might be soft deletable; if not, Address.objects is fine.
+        address_manager = getattr(Address, "all_objects", None) if include_deleted else Address.objects
+        if address_manager is None:
+            address_manager = Address.objects
 
-        # ✅ select_related('file') so documents file can be serialized
+        addresses = list(
+            address_manager.filter(profile=profile).values(
+                "id",
+                "address_type",
+                "country",
+                "province",
+                "district",
+                "municipality",
+                "ward_no",
+                "street",
+                "tole",
+                "house_no",
+                "postal_code",
+                "is_primary",
+            )
+        )
+
+        # Documents might be soft deletable too
+        doc_manager = getattr(ProfileDocument, "all_objects", None) if include_deleted else ProfileDocument.objects
+        if doc_manager is None:
+            doc_manager = ProfileDocument.objects
+
         docs_qs = (
-            profile.documents
+            doc_manager
             .select_related("file")
-            .all()
+            .filter(profile=profile)
             .order_by("-created_at")
         )
 
@@ -551,8 +602,22 @@ def update_onboarding_bundle_by_user(
 @transaction.atomic
 def delete_onboarding_bundle_by_user(*, user_id: str) -> None:
     user = _get_admin_user_or_404(user_id=user_id)
+
+    # Deactivate school
     school = School.objects.filter(owner=user).order_by("-created_at").first()
     if school:
         school.is_active = False
         school.save(update_fields=["is_active"])
+
+        # optional but recommended
+        if hasattr(school, "settings") and school.settings_id:
+            school.settings.is_active = False
+            school.settings.save(update_fields=["is_active"])
+
+    # Deactivate + mark user deleted
+    user.status = UserStatus.DELETED
+    user.is_active = False
+    user.save(update_fields=["status", "is_active"])
+
+    # Soft delete (sets is_deleted / deleted_at)
     user.soft_delete()
