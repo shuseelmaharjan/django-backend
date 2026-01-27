@@ -14,6 +14,7 @@ from pathlib import Path
 import os
 from datetime import timedelta
 from corsheaders.defaults import default_headers
+from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -70,6 +71,7 @@ INSTALLED_APPS = [
     'filehandler',
     'locations',
     'onboarding',
+    'smtp',
 ]
 
 
@@ -251,3 +253,19 @@ AUTHX_REFRESH_COOKIE_SAMESITE = "Lax"  # if frontend is on different domain, use
 AUTHX_REFRESH_COOKIE_SECURE = False    # set True in production (https)
 AUTHX_REFRESH_COOKIE_HTTPONLY = True
 AUTHX_REFRESH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60
+
+
+# Google SMTP
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp-relay.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "true").lower() == "true"
+EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "false").lower() == "true"
+
+# If you chose "Require SMTP authentication" in Admin Console:
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")  # full email
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@yourdomain.com")
+SERVER_EMAIL = os.getenv("SERVER_EMAIL", DEFAULT_FROM_EMAIL)
+APP_NAME = config("APP_NAME", default="MyApp")

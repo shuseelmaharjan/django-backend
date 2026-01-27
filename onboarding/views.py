@@ -165,8 +165,17 @@ class AdminOnboardingViewSet(
 
     def create(self, request, *args, **kwargs):
         serializer = AdminOnboardingCreateSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        result = serializer.save()
+
+        if not serializer.is_valid():
+            logger.error("Onboarding create validation errors: %s", serializer.errors)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            result = serializer.save()
+        except Exception as e:
+            logger.exception("Onboarding create failed: %s", str(e))
+            raise
+
         return Response(
             {"message": "Admin onboarding created successfully.", "data": result},
             status=status.HTTP_201_CREATED,
