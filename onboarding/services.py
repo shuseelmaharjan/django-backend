@@ -160,7 +160,7 @@ def onboard_admin_user_and_school(*, validated_data: Dict[str, Any]) -> Dict[str
                 "phone": user.phone,
                 "username": user.username,
                 "password": temp_password,
-                "app_name": getattr(settings, "APP_NAME", "MyApp"),
+                "app_name": settings.APP_NAME,
             }
 
             text_fallback = (
