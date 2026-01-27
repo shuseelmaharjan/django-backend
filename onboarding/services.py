@@ -1,6 +1,9 @@
 # onboarding/services.py
 from __future__ import annotations
 
+import logging
+
+
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 
@@ -17,8 +20,13 @@ from utils.phone_validator import clean_and_validate_phone
 from utils.usernames import build_base_username, make_unique_username  # ✅ correct import
 from filehandler.serializers import UploadedFileSerializer
 from filehandler.models import UploadedFile
+from common.passwords import generate_strong_password
+from smtp.services import send_html_template_email
+from django.conf import settings
+
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 REQUIRED_DOC_MAP = {
@@ -106,6 +114,8 @@ def onboard_admin_user_and_school(*, validated_data: Dict[str, Any]) -> Dict[str
     profile_data = validated_data["profile"]
     addresses_data = validated_data["addresses"]
     documents_data = validated_data["documents"]
+    email = (user_data.get("email") or "").strip().lower()
+    temp_password = generate_strong_password()
 
     # 1) USER
     try:
@@ -128,9 +138,10 @@ def onboard_admin_user_and_school(*, validated_data: Dict[str, Any]) -> Dict[str
     )
 
     try:
+
         user = User.objects.create_user(
             phone=cleaned_phone,
-            password=None,
+            password=temp_password,
             first_name=user_data["first_name"],
             middle_name=user_data.get("middle_name", ""),
             last_name=user_data["last_name"],
@@ -139,6 +150,44 @@ def onboard_admin_user_and_school(*, validated_data: Dict[str, Any]) -> Dict[str
             status=UserStatus.ACTIVE,
             username=username,
         )
+
+        # send credentials email AFTER successful commit
+        if email:
+            subject = "Your admin account credentials"
+
+            context = {
+                "first_name": user.first_name,
+                "phone": user.phone,
+                "username": user.username,
+                "password": temp_password,
+                "app_name": getattr(settings, "APP_NAME", "MyApp"),
+            }
+
+            text_fallback = (
+                f"Hi {user.first_name},\n\n"
+                f"Login (phone): {user.phone}\n"
+                f"Username: {user.username}\n"
+                f"Password: {temp_password}\n\n"
+                f"Please change your password after login."
+            )
+
+            def _safe_send():
+                try:
+                    send_html_template_email(
+                        subject=subject,
+                        template_name="smtp/onboarding_credentials.html",
+                        context=context,
+                        recipients=[email],
+                        text_fallback=text_fallback,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to send onboarding credentials email",
+                        extra={"user_id": str(user.id), "email": email},
+                    )
+
+            transaction.on_commit(_safe_send)
+
     except IntegrityError:
         # mostly username DB unique collision
         raise serializers.ValidationError({"user": {"username": ["Username already exists. Try again."]}})
