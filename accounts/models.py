@@ -1,11 +1,14 @@
 # accounts/models.py
 import uuid
+from datetime import timedelta
 
+from django.conf import settings
 from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from common.constants import UserStatus, UserRole
 from common.models import SoftDeleteModel
 from django.db.models import Q
+from django.utils import timezone
 
 def _gen_username_from_phone(phone: str) -> str:
     # simple default: "u_<last 8 digits>"
@@ -160,3 +163,63 @@ class User(SoftDeleteModel, AbstractUser):
                 name="uq_user_username_alive",
             ),
         ]
+
+class PasswordResetOTP(models.Model):
+    """
+    Stores OTP for password reset via email.
+
+    Notes:
+    - OTP is stored as a HASH (never plaintext).
+    - After OTP is verified, we issue a reset_token (UUID) used to set a new password.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="password_reset_otps",
+    )
+
+    email = models.EmailField(db_index=True)
+    otp_hash = models.CharField(max_length=128)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(db_index=True)
+
+    # rate limiting / brute force protection
+    attempts = models.PositiveSmallIntegerField(default=0)
+    max_attempts = models.PositiveSmallIntegerField(default=5)
+
+    # status
+    is_used = models.BooleanField(default=False)
+    verified_at = models.DateTimeField(null=True, blank=True)
+
+    # issued after OTP verification
+    reset_token = models.UUIDField(null=True, blank=True, db_index=True)
+    reset_token_expires_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["email", "expires_at"]),
+            models.Index(fields=["user", "created_at"]),
+            models.Index(fields=["reset_token", "reset_token_expires_at"]),
+        ]
+
+    @classmethod
+    def default_expiry(cls) -> timezone.datetime:
+        return timezone.now() + timedelta(minutes=10)
+
+    @classmethod
+    def default_reset_token_expiry(cls) -> timezone.datetime:
+        return timezone.now() + timedelta(minutes=15)
+
+    def expired(self) -> bool:
+        return timezone.now() > self.expires_at
+
+    def reset_token_expired(self) -> bool:
+        return not self.reset_token_expires_at or timezone.now() > self.reset_token_expires_at
+
+    def mark_used(self):
+        self.is_used = True
+        self.save(update_fields=["is_used"])
