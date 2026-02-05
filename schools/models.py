@@ -81,29 +81,3 @@ class School(models.Model):
         super().save(*args, **kwargs)
 
 
-class SchoolSetting(models.Model):
-    """
-    One-to-one settings per school.
-    """
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-
-    school = models.OneToOneField(
-        School,
-        on_delete=models.CASCADE,
-        related_name="settings",
-    )
-
-    invoice_prefix = models.CharField(max_length=20, default="INV")
-    receipt_prefix = models.CharField(max_length=20, default="RCPT")
-    academic_year = models.ForeignKey("academics.AcademicYear", on_delete=models.PROTECT)
-
-    # Fees / penalties (optional)
-    late_fee_fixed = models.DecimalField(max_digits=10, decimal_places=2, default="0.00")
-    late_fee_percent = models.DecimalField(max_digits=5, decimal_places=2, default="0.00")
-
-    is_active = models.BooleanField(default=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f"Settings({self.school.code})"
