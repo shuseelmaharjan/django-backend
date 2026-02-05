@@ -15,7 +15,7 @@ def set_refresh_cookie(response, refresh_token: str):
         httponly=getattr(settings, "AUTHX_REFRESH_COOKIE_HTTPONLY", True),
         secure=getattr(settings, "AUTHX_REFRESH_COOKIE_SECURE", False),
         samesite=getattr(settings, "AUTHX_REFRESH_COOKIE_SAMESITE", "Lax"),
-        path=getattr(settings, "AUTHX_REFRESH_COOKIE_PATH", "/api/auth/"),
+        path=getattr(settings, "AUTHX_REFRESH_COOKIE_PATH", "/"),
         max_age=max_age,  # this makes it NOT "Session"
     )
 
@@ -23,7 +23,7 @@ def set_refresh_cookie(response, refresh_token: str):
 def clear_refresh_cookie(response):
     response.delete_cookie(
         key=getattr(settings, "AUTHX_REFRESH_COOKIE_NAME", "refresh_token"),
-        path=getattr(settings, "AUTHX_REFRESH_COOKIE_PATH", "/api/auth/"),
+        path=getattr(settings, "AUTHX_REFRESH_COOKIE_PATH", "/"),
     )
 
 

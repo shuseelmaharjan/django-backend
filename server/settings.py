@@ -71,6 +71,7 @@ INSTALLED_APPS = [
     'locations',
     'onboarding',
     'smtp',
+    'batch',
 ]
 
 
@@ -247,7 +248,7 @@ SIMPLE_JWT = {
 
 # cookie config for web
 AUTHX_REFRESH_COOKIE_NAME = "refresh_token"
-AUTHX_REFRESH_COOKIE_PATH = "/api/auth/"
+AUTHX_REFRESH_COOKIE_PATH = "/"
 AUTHX_REFRESH_COOKIE_SAMESITE = "Lax"  # if frontend is on different domain, use "None" + Secure=True
 AUTHX_REFRESH_COOKIE_SECURE = False    # set True in production (https)
 AUTHX_REFRESH_COOKIE_HTTPONLY = True
