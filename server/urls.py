@@ -43,6 +43,8 @@ urlpatterns = [
     path("api/", include("locations.urls")),
     path("api/onboarding/", include("onboarding.urls")),
     path("api/v1/", include("batch.urls")),
+    path("api/v1/academics/", include("academics.urls")),
+
 
 
 
