@@ -44,6 +44,7 @@ urlpatterns = [
     path("api/onboarding/", include("onboarding.urls")),
     path("api/v1/", include("batch.urls")),
     path("api/v1/academics/", include("academics.urls")),
+    path("api/v1/fees/", include("fees.urls")),
 
 
 

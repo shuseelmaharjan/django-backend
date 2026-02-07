@@ -72,6 +72,7 @@ INSTALLED_APPS = [
     'onboarding',
     'smtp',
     'batch',
+    'fees',
 ]
 
 

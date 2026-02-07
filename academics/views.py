@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from rest_framework import mixins, status, viewsets
+from rest_framework import mixins, status, viewsets, filters
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -36,10 +36,20 @@ class AcademicClassViewSet(
 ):
     permission_classes = [IsAuthenticated, IsSchoolAdmin]
     lookup_field = "pk"
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ["name", "code", "batch"]
+    ordering_fields = ["name", "code", "created_at", "updated_at"]
+    ordering = ["name"]
 
     def get_queryset(self):
         school = get_school_for_user(self.request.user)
-        return AcademicClass.objects.select_related("batch__school").filter(batch__school=school)
+        qs = AcademicClass.objects.select_related("batch__school").filter(batch__school=school)
+
+        batch_id = (self.request.query_params.get("batch") or "").strip()
+        if batch_id:
+            qs = qs.filter(batch_id=batch_id)
+
+        return qs
 
     def get_serializer_class(self):
         if self.action == "create":

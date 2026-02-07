@@ -59,7 +59,17 @@ class StudentDocumentType(models.TextChoices):
     CHARACTER_CERTIFICATE = "character_certificate", "Character Certificate"
     OTHER = "other", "Other"
 
-
+class Currency(models.TextChoices):
+    NPR = "NPR", "Nepalese Rupee"
+    INR = "INR", "Indian Rupee"
+    USD = "USD", "US Dollar"
+    EUR = "EUR", "Euro"
+    GBP = "GBP", "British Pound"
+    JPY = "JPY", "Japanese Yen"
+    CNY = "CNY", "Chinese Yuan"
+    AUD = "AUD", "Australian Dollar"
+    CAD = "CAD", "Canadian Dollar"
+    CHF = "CHF", "Swiss Franc"
 
 COUNTRY_DATA = [
     {

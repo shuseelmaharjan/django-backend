@@ -1,27 +1,29 @@
 """
-Utility to get the active school for a user without importing models at module import time
-(which can cause AppRegistryNotReady during Django startup).
+Get school for the user.
+- Superadmin may not have a school -> raise ValidationError (or handle separately).
+- School admin (owner) -> School.owner
+- Other roles -> Profile.school
 """
 
 from typing import TYPE_CHECKING
 from rest_framework.exceptions import ValidationError
 
 if TYPE_CHECKING:
-    # For type checkers only; avoids importing models at runtime during module import
     from schools.models import School
 
 
 def get_school_for_user(user) -> "School":
-    """
-    Returns the active school owned by the user (school admin).
-    Raise ValidationError if not found.
-    This does a local import of the School model to avoid AppRegistryNotReady
-    when this module is imported early during Django startup.
-    """
-    # Local import to avoid importing Django models at module import time
     from schools.models import School
+    from profiles.models import Profile
 
+    # 1) Owner-based school (your current logic)
     school = School.objects.filter(owner=user, is_active=True).first()
-    if not school:
-        raise ValidationError({"school": ["No active school found for this user."]})
-    return school
+    if school:
+        return school
+
+    # 2) Profile-based school (staff/teachers/etc.)
+    profile = Profile.objects.select_related("school").filter(user=user).first()
+    if profile and profile.school and profile.school.is_active:
+        return profile.school
+
+    raise ValidationError({"school": ["No active school found for this user."]})

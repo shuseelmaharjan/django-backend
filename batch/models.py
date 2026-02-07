@@ -2,6 +2,12 @@ from django.db import models
 from django.core.exceptions import ValidationError
 from utils.dates import bs_to_ad
 
+class BatchStatus(models.TextChoices):
+    ACTIVE = "ACTIVE", "Active"
+    INACTIVE = "INACTIVE", "Inactive"
+    ARCHIVED = "ARCHIVED", "Archived"
+    DELETED = "DELETED", "Deleted"
+    EXPIRED = "EXPIRED", "Expired"
 
 class AcademicBatch(models.Model):
     id = models.AutoField(primary_key=True)
@@ -20,6 +26,12 @@ class AcademicBatch(models.Model):
         "schools.School",
         on_delete=models.CASCADE,
         related_name="batches",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=BatchStatus.choices,
+        default=BatchStatus.ACTIVE,
+        db_index=True,
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
