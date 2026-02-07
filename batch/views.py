@@ -19,6 +19,7 @@ from common.permissions import IsSchoolAdmin
 from common.pagination import MetaPageNumberPagination
 from common.mixins import ListFilterMetaMixin
 from utils.get_school_id_by_token import get_school_for_user
+from rest_framework.filters import SearchFilter, OrderingFilter
 
 logger = logging.getLogger(__name__)
 
@@ -73,11 +74,14 @@ class AcademicBatchViewSet(
     permission_classes = [IsAuthenticated, IsSchoolAdmin]
     lookup_field = "pk"
     pagination_class = MetaPageNumberPagination
-
-    searchable_fields = ["name"]
-    ordering_param_name = "ordering"
+    #search configuration
+    search_fields = ['name']  # example searchable field
+    searchable_fields = search_fields
     search_param_name = "search"
 
+    # ordering configuration
+    ordering_param_name = "ordering"
+    ordering_fields = ["name", "start_date_ad", "end_date_ad", "created_at"]
     public_sort_meta = {
         "name": "Name",
         "start_date_ad": "Start date",
@@ -86,6 +90,7 @@ class AcademicBatchViewSet(
     }
     sortable_fields = public_sort_meta
 
+    # filter configuration
     public_filter_meta = {
         "status": "Status (active / inactive / all)",
     }

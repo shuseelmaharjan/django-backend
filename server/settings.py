@@ -82,7 +82,6 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "authx.middleware.AttachNewAccessTokenMiddleware",
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -210,6 +209,7 @@ REST_FRAMEWORK = {
             "rest_framework.filters.OrderingFilter",
         ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "EXCEPTION_HANDLER": "common.exception_handler.exception_handler",
 }
 
 

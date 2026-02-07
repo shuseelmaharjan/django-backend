@@ -48,14 +48,15 @@ class AcademicBatch(models.Model):
 
         # Overlap rule ONLY against ACTIVE batches in same school
         # overlap condition: existing.start <= new.end AND existing.end >= new.start
-        qs = self.__class__.objects.filter(school=self.school, is_active=True)
+        qs = self.__class__.objects.filter(school=self.school)
         if self.pk:
             qs = qs.exclude(pk=self.pk)
 
         if qs.filter(start_date_ad__lte=self.end_date_ad, end_date_ad__gte=self.start_date_ad).exists():
             raise ValidationError(
-                "An active batch already exists that overlaps this date range. "
-                "Deactivate the existing batch first."
+                {"non_field_errors": [
+                    "A batch already exists that overlaps this date range."
+                ]}
             )
 
     def save(self, *args, **kwargs):

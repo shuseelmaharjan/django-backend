@@ -43,7 +43,15 @@ class AcademicBatchCreateSerializer(serializers.Serializer):
             end_date_bs=validated_data["end_date_bs"],
             is_active=validated_data.get("is_active", False),
         )
-        batch.save()
+
+        try:
+            batch.save()  # calls full_clean() in model.save()
+        except DjangoValidationError as e:
+            # Convert to DRF error response (400)
+            if hasattr(e, "message_dict"):
+                raise serializers.ValidationError(e.message_dict)
+            raise serializers.ValidationError({"detail": e.messages})
+
         return batch
 
 
@@ -84,7 +92,13 @@ class AcademicBatchUpdateSerializer(serializers.Serializer):
             if f in validated_data:
                 setattr(instance, f, validated_data[f])
 
-        instance.save()
+        try:
+            instance.save()
+        except DjangoValidationError as e:
+            if hasattr(e, "message_dict"):
+                raise serializers.ValidationError(e.message_dict)
+            raise serializers.ValidationError({"detail": e.messages})
+
         return instance
 
 

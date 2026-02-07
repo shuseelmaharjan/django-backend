@@ -1,15 +1,18 @@
+# academics/views.py
 from __future__ import annotations
 
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import mixins, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError
 
 from academics.models import AcademicClass, Section
 from academics.serializers import (
     AcademicClassCreateSerializer, AcademicClassUpdateSerializer, AcademicClassReadSerializer,
+    AcademicClassReorderSerializer,
     SectionCreateSerializer, SectionUpdateSerializer, SectionReadSerializer,
+    SectionReorderSerializer,
 )
 from common.permissions import IsSchoolAdmin
 from utils.get_school_id_by_token import get_school_for_user
@@ -49,7 +52,10 @@ class AcademicClassViewSet(
         s = AcademicClassCreateSerializer(data=request.data, context={"request": request})
         s.is_valid(raise_exception=True)
         obj = s.save()
-        return Response({"message": "Class created.", "data": AcademicClassReadSerializer(obj).data}, status=status.HTTP_201_CREATED)
+        return Response(
+            {"message": "Class created.", "data": AcademicClassReadSerializer(obj).data},
+            status=status.HTTP_201_CREATED,
+        )
 
     def update(self, request, *args, **kwargs):
         obj = self.get_object()
@@ -64,6 +70,14 @@ class AcademicClassViewSet(
         s.is_valid(raise_exception=True)
         obj = s.save()
         return Response({"message": "Class updated.", "data": AcademicClassReadSerializer(obj).data})
+
+    @extend_schema(tags=["Classroom"], request=AcademicClassReorderSerializer)
+    @action(detail=False, methods=["post"], url_path="reorder")
+    def reorder(self, request):
+        s = AcademicClassReorderSerializer(data=request.data, context={"request": request})
+        s.is_valid(raise_exception=True)
+        result = s.save()
+        return Response({"message": "Classrooms reordered.", "data": result}, status=status.HTTP_200_OK)
 
 
 @extend_schema_view(
@@ -104,7 +118,10 @@ class SectionViewSet(
         s = SectionCreateSerializer(data=request.data, context={"request": request})
         s.is_valid(raise_exception=True)
         obj = s.save()
-        return Response({"message": "Section created.", "data": SectionReadSerializer(obj).data}, status=status.HTTP_201_CREATED)
+        return Response(
+            {"message": "Section created.", "data": SectionReadSerializer(obj).data},
+            status=status.HTTP_201_CREATED,
+        )
 
     def update(self, request, *args, **kwargs):
         obj = self.get_object()
@@ -119,3 +136,11 @@ class SectionViewSet(
         s.is_valid(raise_exception=True)
         obj = s.save()
         return Response({"message": "Section updated.", "data": SectionReadSerializer(obj).data})
+
+    @extend_schema(tags=["Section"], request=SectionReorderSerializer)
+    @action(detail=False, methods=["post"], url_path="reorder")
+    def reorder(self, request):
+        s = SectionReorderSerializer(data=request.data, context={"request": request})
+        s.is_valid(raise_exception=True)
+        result = s.save()
+        return Response({"message": "Sections reordered.", "data": result}, status=status.HTTP_200_OK)
