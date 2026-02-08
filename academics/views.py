@@ -7,12 +7,12 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from academics.models import AcademicClass, Section
+from academics.models import AcademicClass, Section, StudentEnrollments
 from academics.serializers import (
     AcademicClassCreateSerializer, AcademicClassUpdateSerializer, AcademicClassReadSerializer,
     AcademicClassReorderSerializer,
     SectionCreateSerializer, SectionUpdateSerializer, SectionReadSerializer,
-    SectionReorderSerializer,
+    SectionReorderSerializer, StudentEnrollmentCreateSerializer, StudentEnrollmentUpdateSerializer, StudentEnrollmentReadSerializer
 )
 from common.permissions import IsSchoolAdmin
 from utils.get_school_id_by_token import get_school_for_user
@@ -154,3 +154,87 @@ class SectionViewSet(
         s.is_valid(raise_exception=True)
         result = s.save()
         return Response({"message": "Sections reordered.", "data": result}, status=status.HTTP_200_OK)
+
+@extend_schema_view(
+    list=extend_schema(tags=["Student Enrollment"]),
+    create=extend_schema(tags=["Student Enrollment"], request=StudentEnrollmentCreateSerializer),
+    retrieve=extend_schema(tags=["Student Enrollment"]),
+    update=extend_schema(tags=["Student Enrollment"], request=StudentEnrollmentUpdateSerializer),
+    partial_update=extend_schema(tags=["Student Enrollment"], request=StudentEnrollmentUpdateSerializer),
+    destroy=extend_schema(tags=["Student Enrollment"]),
+)
+class StudentEnrollmentViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    permission_classes = [IsAuthenticated, IsSchoolAdmin]
+    lookup_field = "pk"
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ["student__first_name", "student__last_name", "student__phone", "student__email"]
+    ordering_fields = ["enrolled_at", "status"]
+    ordering = ["-enrolled_at"]
+
+    def get_queryset(self):
+        school = get_school_for_user(self.request.user)
+
+        qs = (
+            StudentEnrollments.objects
+            .select_related("batch__school", "student", "academic_class", "section")
+            .filter(batch__school=school)
+        )
+
+        batch_id = (self.request.query_params.get("batch") or "").strip()
+        if batch_id:
+            qs = qs.filter(batch_id=batch_id)
+
+        class_id = (self.request.query_params.get("academic_class") or "").strip()
+        if class_id:
+            qs = qs.filter(academic_class_id=class_id)
+
+        section_id = (self.request.query_params.get("section") or "").strip()
+        if section_id:
+            qs = qs.filter(section_id=section_id)
+
+        student_id = (self.request.query_params.get("student") or "").strip()
+        if student_id:
+            qs = qs.filter(student_id=student_id)
+
+        status_q = (self.request.query_params.get("status") or "").strip()
+        if status_q:
+            qs = qs.filter(status=status_q)
+
+        return qs
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return StudentEnrollmentCreateSerializer
+        if self.action in ("update", "partial_update"):
+            return StudentEnrollmentUpdateSerializer
+        return StudentEnrollmentReadSerializer
+
+    def create(self, request, *args, **kwargs):
+        s = StudentEnrollmentCreateSerializer(data=request.data, context={"request": request})
+        s.is_valid(raise_exception=True)
+        obj = s.save()
+        return Response(
+            {"message": "Enrollment created.", "data": StudentEnrollmentReadSerializer(obj).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    def update(self, request, *args, **kwargs):
+        obj = self.get_object()
+        s = StudentEnrollmentUpdateSerializer(instance=obj, data=request.data, partial=False, context={"request": request})
+        s.is_valid(raise_exception=True)
+        obj = s.save()
+        return Response({"message": "Enrollment updated.", "data": StudentEnrollmentReadSerializer(obj).data})
+
+    def partial_update(self, request, *args, **kwargs):
+        obj = self.get_object()
+        s = StudentEnrollmentUpdateSerializer(instance=obj, data=request.data, partial=True, context={"request": request})
+        s.is_valid(raise_exception=True)
+        obj = s.save()
+        return Response({"message": "Enrollment updated.", "data": StudentEnrollmentReadSerializer(obj).data})

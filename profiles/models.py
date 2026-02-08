@@ -2,7 +2,7 @@
 import uuid
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-
+from django.db.models import Q
 
 class Gender(models.TextChoices):
     MALE = "male", _("Male")
@@ -201,3 +201,54 @@ class StudentOtherInfo(models.Model):
 
     def __str__(self):
         return f"StudentOtherInfo({self.profile_id})"
+
+
+class TeacherLevelStatus(models.TextChoices):
+    ACTIVE = "active", "Active"
+    INACTIVE = "inactive", "Inactive"
+    DELETED = "deleted", "Deleted"
+
+class TeacherLevel(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    level = models.CharField(max_length=80)
+
+    status = models.CharField(
+        max_length=20,
+        choices=TeacherLevelStatus.choices,
+        default=TeacherLevelStatus.ACTIVE,
+        db_index=True,
+    )
+
+    from django.db.models import Q
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["level"],
+                condition=~Q(status=TeacherLevelStatus.DELETED),
+                name="uq_teacher_level_level_not_deleted",
+            )
+        ]
+
+    def __str__(self):
+        return self.level
+
+class TeacherSpecialization(models.Model):
+    user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="teacher_specializations")
+    subjects = models.ManyToManyField(
+        "subjects.Subject",
+        related_name="teacher_specializations",
+    )
+    teacher_level = models.ForeignKey(
+        TeacherLevel,
+        on_delete=models.SET_NULL,
+        related_name="teacher_specializations",
+        null=True,
+        blank=True,
+    )
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user"], name="uq_teacher_specialization_user")
+        ]
+    def __str__(self):
+        return f"TeacherSpecialization({self.user_id})"

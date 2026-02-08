@@ -7,8 +7,9 @@ from django.db import IntegrityError, transaction
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
-from academics.models import AcademicClass, Section
+from academics.models import AcademicClass, Section, StudentEnrollments
 from batch.models import AcademicBatch
+from accounts.models import User
 from utils.get_school_id_by_token import get_school_for_user
 
 
@@ -318,3 +319,165 @@ class SectionReorderSerializer(serializers.Serializer):
             Section.objects.bulk_update(to_update, ["sort_order"])
 
         return {"updated": len(ids)}
+
+
+class StudentEnrollmentCreateSerializer(serializers.Serializer):
+    batch_id = serializers.IntegerField()
+    student_id = serializers.UUIDField()
+    academic_class_id = serializers.UUIDField()
+    section_id = serializers.UUIDField(required=False, allow_null=True)
+    status = serializers.ChoiceField(
+        choices=[c[0] for c in StudentEnrollments._meta.get_field("status").choices],
+        required=False,
+    )
+
+    def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
+        request = self.context["request"]
+        school = get_school_for_user(request.user)
+
+        batch = AcademicBatch.objects.filter(id=attrs["batch_id"], school=school).first()
+        if not batch:
+            raise serializers.ValidationError({"batch_id": ["Invalid batch for your school."]})
+        if not batch.is_active:
+            raise serializers.ValidationError({"batch_id": ["You can only enroll students in an active batch."]})
+
+        academic_class = (
+            AcademicClass.objects.select_related("batch__school")
+            .filter(id=attrs["academic_class_id"], batch__school=school)
+            .first()
+        )
+        if not academic_class:
+            raise serializers.ValidationError({"academic_class_id": ["Invalid class for your school."]})
+
+        if academic_class.batch_id != batch.id:
+            raise serializers.ValidationError({"academic_class_id": ["Class does not belong to the selected batch."]})
+
+        # Student must belong to school (adjust field if your User has school relation differently)
+        student = User.objects.filter(id=attrs["student_id"], school=school).first()
+        if not student:
+            raise serializers.ValidationError({"student_id": ["Invalid student for your school."]})
+
+        section = None
+        if attrs.get("section_id"):
+            section = (
+                Section.objects.select_related("academic_class__batch__school")
+                .filter(id=attrs["section_id"], academic_class__batch__school=school)
+                .first()
+            )
+            if not section:
+                raise serializers.ValidationError({"section_id": ["Invalid section for your school."]})
+            if section.academic_class_id != academic_class.id:
+                raise serializers.ValidationError({"section_id": ["Section must belong to the selected class."]})
+
+        attrs["_batch"] = batch
+        attrs["_academic_class"] = academic_class
+        attrs["_student"] = student
+        attrs["_section"] = section
+        return attrs
+
+    def create(self, validated_data: Dict[str, Any]) -> StudentEnrollments:
+        obj = StudentEnrollments(
+            batch=validated_data["_batch"],
+            student=validated_data["_student"],
+            academic_class=validated_data["_academic_class"],
+            section=validated_data["_section"],
+            status=validated_data.get("status") or StudentEnrollments._meta.get_field("status").default,
+        )
+        try:
+            obj.full_clean()
+            obj.save()
+            return obj
+        except DjangoValidationError as e:
+            _raise_django_validation(e)
+        except IntegrityError:
+            # Could be either uq_batch_student_class_enrollment or uq_batch_student_section_enrollment
+            raise serializers.ValidationError({"detail": "Duplicate enrollment for this student."})
+
+
+class StudentEnrollmentUpdateSerializer(serializers.Serializer):
+    academic_class_id = serializers.UUIDField(required=False)
+    section_id = serializers.UUIDField(required=False, allow_null=True)
+    status = serializers.ChoiceField(
+        choices=[c[0] for c in StudentEnrollments._meta.get_field("status").choices],
+        required=False,
+    )
+
+    def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
+        request = self.context["request"]
+        school = get_school_for_user(request.user)
+
+        instance: StudentEnrollments = self.instance
+
+        # Block updates if batch inactive
+        if instance.batch and not instance.batch.is_active:
+            raise serializers.ValidationError({"detail": "You can only modify enrollments in an active batch."})
+
+        academic_class = instance.academic_class
+        section = instance.section
+
+        # If class is changing, validate ownership + batch match
+        if "academic_class_id" in attrs:
+            academic_class = (
+                AcademicClass.objects.select_related("batch__school")
+                .filter(id=attrs["academic_class_id"], batch__school=school)
+                .first()
+            )
+            if not academic_class:
+                raise serializers.ValidationError({"academic_class_id": ["Invalid class for your school."]})
+            if academic_class.batch_id != instance.batch_id:
+                raise serializers.ValidationError({"academic_class_id": ["Class does not belong to this enrollment batch."]})
+
+        # If section is provided (or null), validate it
+        if "section_id" in attrs:
+            if attrs["section_id"] is None:
+                section = None
+            else:
+                section = (
+                    Section.objects.select_related("academic_class__batch__school")
+                    .filter(id=attrs["section_id"], academic_class__batch__school=school)
+                    .first()
+                )
+                if not section:
+                    raise serializers.ValidationError({"section_id": ["Invalid section for your school."]})
+                if section.academic_class_id != academic_class.id:
+                    raise serializers.ValidationError({"section_id": ["Section must belong to the selected class."]})
+
+        attrs["_academic_class"] = academic_class
+        attrs["_section"] = section
+        return attrs
+
+    def update(self, instance: StudentEnrollments, validated_data: Dict[str, Any]) -> StudentEnrollments:
+        if "_academic_class" in validated_data:
+            instance.academic_class = validated_data["_academic_class"]
+        if "_section" in validated_data:
+            instance.section = validated_data["_section"]
+        if "status" in validated_data:
+            instance.status = validated_data["status"]
+
+        try:
+            instance.full_clean()
+            instance.save()
+            return instance
+        except DjangoValidationError as e:
+            _raise_django_validation(e)
+        except IntegrityError:
+            raise serializers.ValidationError({"detail": "Duplicate enrollment for this student."})
+
+
+class StudentEnrollmentReadSerializer(serializers.ModelSerializer):
+    batch_id = serializers.IntegerField(source="batch.id", read_only=True)
+    academic_class_id = serializers.UUIDField(source="academic_class.id", read_only=True)
+    section_id = serializers.UUIDField(source="section.id", read_only=True, allow_null=True)
+    student_id = serializers.UUIDField(source="student.id", read_only=True)
+
+    class Meta:
+        model = StudentEnrollments
+        fields = [
+            "id",
+            "batch_id",
+            "student_id",
+            "academic_class_id",
+            "section_id",
+            "enrolled_at",
+            "status",
+        ]

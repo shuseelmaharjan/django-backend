@@ -46,6 +46,9 @@ urlpatterns = [
     path("api/v1/academics/", include("academics.urls")),
     path("api/v1/fees/", include("fees.urls")),
 
+    path("api/v1/", include("subjects.urls")),
+    path("api/v1/", include("profiles.urls")),
+
 
 
 

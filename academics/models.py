@@ -1,6 +1,14 @@
 import uuid
 from django.db import models
 from django.core.exceptions import ValidationError
+from django.db.models import Q
+
+class EnrollmentStatus(models.TextChoices):
+    ENROLLED = "enrolled", "Enrolled"
+    DROPPED = "dropped", "Dropped"
+    GRADUATED = "graduated", "Graduated"
+    SUSPENDED = "suspended", "Suspended"
+    ALUMNI = "alumni", "Alumni"
 
 
 class AcademicClass(models.Model):
@@ -76,3 +84,118 @@ class Section(models.Model):
 
     def __str__(self):
         return f"{self.academic_class.name} - {self.name}"
+
+# class SubjectEnrollments(models.Model):
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+#     batch = models.ForeignKey(
+#         "batch.AcademicBatch",
+#         on_delete=models.CASCADE,
+#         related_name="subject_enrollments",
+#         db_index=True,
+#     )
+#     teacher = models.ForeignKey(
+#         "accounts.User",
+#         on_delete=models.CASCADE,
+#         related_name="subject_enrollments",
+#         db_index=True,
+#     )
+#     subject = models.ForeignKey(
+#         "subjects.Subject",
+#         on_delete=models.CASCADE,
+#         related_name="enrollments",
+#         db_index=True,
+#     )
+#     academic_class = models.ForeignKey(
+#         "academics.AcademicClass",
+#         on_delete=models.CASCADE,
+#         related_name="subject_enrollments",
+#         db_index=True,
+#     )
+#     section = models.ForeignKey(
+#         "academics.Section",
+#         on_delete=models.CASCADE,
+#         related_name="subject_enrollments",
+#         db_index=True,
+#         null=True,
+#         blank=True,
+#     )
+#     enrolled_at = models.DateTimeField(auto_now_add=True)
+#     credit_hours = models.PositiveSmallIntegerField(default=0)
+#     publication = models.TextField(blank=True, null=True)
+
+
+class StudentEnrollments(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    batch = models.ForeignKey(
+        "batch.AcademicBatch",
+        on_delete=models.CASCADE,
+        related_name="enrollments",
+        db_index=True,
+    )
+
+    student = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="enrollments",
+        db_index=True,
+    )
+
+    academic_class = models.ForeignKey(
+        "academics.AcademicClass",
+        on_delete=models.CASCADE,
+        related_name="enrollments",
+        db_index=True,
+    )
+
+    section = models.ForeignKey(
+        "academics.Section",
+        on_delete=models.CASCADE,
+        related_name="enrollments",
+        db_index=True,
+        null=True,
+        blank=True,
+    )
+
+    enrolled_at = models.DateTimeField(auto_now_add=True)
+
+    status = models.CharField(
+        max_length=20,
+        choices=EnrollmentStatus.choices,
+        default=EnrollmentStatus.ENROLLED,
+        db_index=True,
+    )
+
+    class Meta:
+        constraints = [
+            # Student can't enroll in same class twice in same batch
+            models.UniqueConstraint(
+                fields=["batch", "student", "academic_class"],
+                name="uq_batch_student_class_enrollment",
+            ),
+            # If section is provided, student can't enroll in same section twice in same batch
+            models.UniqueConstraint(
+                fields=["batch", "student", "section"],
+                condition=Q(section__isnull=False),
+                name="uq_batch_student_section_enrollment",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["batch", "academic_class", "section"]),
+            models.Index(fields=["batch", "student"]),
+            models.Index(fields=["status"]),
+        ]
+
+    def clean(self):
+        # batch must match academic_class.batch
+        if self.academic_class_id and self.batch_id:
+            if self.academic_class.batch_id != self.batch_id:
+                raise ValidationError({"batch": ["Batch must match the academic class batch."]})
+
+        # section must belong to academic_class
+        if self.section_id and self.academic_class_id:
+            if self.section.academic_class_id != self.academic_class_id:
+                raise ValidationError({"section": ["Section must belong to the selected class."]})
+
+    def __str__(self):
+        return f"{self.student_id} -> {self.academic_class_id} ({self.batch_id})"
