@@ -232,3 +232,28 @@ class IsFinanceStaffOrReadOnly(IsFinanceStaff):
         if request.method in SAFE_METHODS:
             return True
         return super().has_permission(request, view)
+
+class CanEnrollStudents(BasePermission):
+    """
+    Custom permission to check if user can enroll students.
+    Allowed for: Principal, Admin, Vice Principal, Admissions, Registrar.
+    """
+    message = "You do not have permission to enroll students."
+
+    def has_permission(self, request, view):
+        if not _is_authed(request):
+            return False
+
+        # platform superadmin bypass
+        if _is_platform_superadmin(request):
+            return True
+
+        user = request.user
+        allowed_roles = (
+            UserRole.PRINCIPAL,
+            UserRole.ADMIN,
+            UserRole.VICE_PRINCIPAL,
+            UserRole.ADMISSIONS,
+            UserRole.REGISTRAR,
+        )
+        return bool(user.role and user.role in allowed_roles)

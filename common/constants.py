@@ -16,6 +16,7 @@ class UserRole(models.TextChoices):
     HOSTEL = "hostel", "warden"
     IT = "it", "it_officer"
     OTHER = "other", "other"
+    STUDENT = "student", "student"
 
 class UserStatus(models.TextChoices):
     INVITED = "invited", "Invited"
@@ -24,6 +25,7 @@ class UserStatus(models.TextChoices):
     LOCKED = "locked", "Locked"
     DELETED = "deleted", "Deleted"
     INACTIVE = "inactive", "Inactive"
+    DRAFT = "draft", "Draft"
 
 
 

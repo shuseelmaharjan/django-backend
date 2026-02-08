@@ -174,3 +174,30 @@ class ProfileDocument(models.Model):
 
     def __str__(self):
         return f"{self.profile_id} - {self.document_type}"
+
+
+class StudentOtherInfo(models.Model):
+    is_disabled = models.BooleanField(default=False)
+    disability_details = models.CharField(max_length=255, blank=True, default="")
+    visual_issues = models.BooleanField(default=False)
+    hearing_issues = models.BooleanField(default=False)
+    mobility_issues = models.BooleanField(default=False)
+    chronic_illness = models.BooleanField(default=False)
+    chronic_illness_details = models.CharField(max_length=255, blank=True, default="")
+    allergies = models.BooleanField(default=False)
+    allergy_details = models.CharField(max_length=255, blank=True, default="")
+    medications = models.BooleanField(default=False)
+    medication_details = models.CharField(max_length=255, blank=True, default="")
+    dietary_restrictions = models.BooleanField(default=False)
+    dietary_restriction_details = models.CharField(max_length=255, blank=True, default="")
+    other_health_issues = models.BooleanField(default=False)
+    other_health_issue_details = models.CharField(max_length=255, blank=True, default="")
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name="student_other_info")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["profile"], name="uq_student_other_info_profile")
+        ]
+
+    def __str__(self):
+        return f"StudentOtherInfo({self.profile_id})"
