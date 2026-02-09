@@ -1,3 +1,5 @@
+# batch/models.py
+import uuid
 from django.db import models
 from django.core.exceptions import ValidationError
 from utils.dates import bs_to_ad
