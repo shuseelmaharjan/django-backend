@@ -257,3 +257,15 @@ class CanEnrollStudents(BasePermission):
             UserRole.REGISTRAR,
         )
         return bool(user.role and user.role in allowed_roles)
+
+class IsSchoolManagement(HasAnyRole):
+    """
+    Principal/Admin/Vice Principal/Coordinator
+    """
+    message = "Only school management can access this resource."
+    allowed_roles = (
+        UserRole.PRINCIPAL,
+        UserRole.ADMIN,
+        UserRole.VICE_PRINCIPAL,
+        UserRole.COORDINATOR,
+    )
