@@ -95,6 +95,7 @@ class StaffCreateUpdateSerializer(serializers.Serializer):
       "documents": { "photo": {...}, "pan": {...} }
     }
     """
+
     role = serializers.ChoiceField(choices=[(r, r) for r in ALLOWED_STAFF_ROLES])
 
     user = StaffUserPayloadSerializer()
@@ -124,7 +125,7 @@ class StaffCreateUpdateSerializer(serializers.Serializer):
         if User.all_objects.filter(phone=phone, is_deleted=False).exists():
             raise serializers.ValidationError({"user": {"phone": ["Phone already exists."]}})
 
-        # unique email (reuse helper)
+        # unique email
         try:
             email = validate_unique_email(email_raw, User, exclude_user_id=None)
         except Exception as e:
@@ -148,7 +149,7 @@ class StaffCreateUpdateSerializer(serializers.Serializer):
         return attrs
 
     @transaction.atomic
-    def create(self, validated_data: dict[str, Any]) -> dict[str, Any]:
+    def create(self, validated_data: dict[str, Any]) -> "User":
         request = self.context["request"]
         school = validated_data["_school"]
 
@@ -157,7 +158,10 @@ class StaffCreateUpdateSerializer(serializers.Serializer):
         addresses_data = validated_data.get("addresses") or []
         documents_data = validated_data.get("documents") or {}
 
-        # generate username
+        role = validated_data["role"]
+        is_teacher = (role == "teacher")
+
+        # username
         base = build_base_username(
             user_data.get("first_name", ""),
             user_data.get("middle_name", ""),
@@ -169,8 +173,14 @@ class StaffCreateUpdateSerializer(serializers.Serializer):
 
         username = make_unique_username(base, _exists)
 
-        # generate password
+        # password
         temp_password = generate_temp_password()
+
+        # ✅ status rule (teacher -> DRAFT, others -> ACTIVE)
+        status_value = UserStatus.DRAFT if is_teacher else UserStatus.ACTIVE
+
+        # optional but recommended: draft users shouldn't be able to login
+        is_active_value = False if is_teacher else True
 
         # create user
         user = User.objects.create_user(
@@ -181,9 +191,9 @@ class StaffCreateUpdateSerializer(serializers.Serializer):
             first_name=user_data.get("first_name", ""),
             middle_name=user_data.get("middle_name", ""),
             last_name=user_data.get("last_name", ""),
-            role=validated_data["role"],
-            status=UserStatus.ACTIVE,
-            is_active=True,
+            role=role,
+            status=status_value,
+            is_active=is_active_value,
         )
 
         # create profile
@@ -205,10 +215,9 @@ class StaffCreateUpdateSerializer(serializers.Serializer):
         for a in addresses_data:
             Address.objects.create(profile=profile, **a)
 
-        # documents (dict keyed by document_type)
+        # documents
         for doc_type, payload in documents_data.items():
             file_id = payload.get("file")
-            # ensure file exists
             if not UploadedFile.objects.filter(id=file_id).exists():
                 raise serializers.ValidationError({"documents": {doc_type: ["Invalid file id."]}})
 
@@ -222,9 +231,9 @@ class StaffCreateUpdateSerializer(serializers.Serializer):
                 remarks=payload.get("remarks", ""),
             )
 
-        # send credentials email AFTER successful commit
+        # ✅ send credentials only if staff is ACTIVE (i.e., not teacher draft)
         email = user.email
-        if email:
+        if email and not is_teacher:
             subject = "Your admin account credentials"
 
             context = {
@@ -260,20 +269,111 @@ class StaffCreateUpdateSerializer(serializers.Serializer):
 
             transaction.on_commit(_safe_send)
 
-        return {
-            "id": str(user.id),
-            "role": user.role,
-            "user": {
-                "first_name": user.first_name,
-                "middle_name": user.middle_name,
-                "last_name": user.last_name,
-                "phone": user.phone,
-                "email": user.email,
-                "username": user.username,
-                "status": user.status,
-            },
-            "profile_id": str(profile.id),
-        }
+        return user
+
+
+class StaffUpdateSerializer(serializers.Serializer):
+    # ✅ role removed: cannot change role on update
+    user = StaffUserPayloadSerializer(required=False)
+    profile = StaffProfilePayloadSerializer(required=False)
+    addresses = AddressPayloadSerializer(many=True, required=False)
+    documents = serializers.DictField(child=DocumentItemSerializer(), required=False)
+
+    def validate(self, attrs):
+        request = self.context["request"]
+        school = get_school_for_user(request.user)
+        attrs["_school"] = school
+        return attrs
+
+    @transaction.atomic
+    def update(self, instance: "User", validated_data):
+        school = validated_data["_school"]
+
+        # ensure same school (via profile)
+        if not hasattr(instance, "profile") or instance.profile.school_id != school.id:
+            raise ValidationError({"detail": "Not allowed."})
+
+        # ✅ hard-block role change even if someone tries to sneak it in
+        if "role" in validated_data and validated_data["role"] != instance.role:
+            raise ValidationError({"role": ["Role cannot be changed."]})
+
+        # update user fields
+        u = validated_data.get("user") or {}
+
+        if "phone" in u:
+            phone = clean_and_validate_phone(u["phone"])
+            if User.all_objects.filter(phone=phone, is_deleted=False).exclude(pk=instance.pk).exists():
+                raise ValidationError({"user": {"phone": ["Phone already exists."]}})
+            instance.phone = phone
+
+        if "email" in u:
+            instance.email = validate_unique_email(u["email"], User, exclude_user_id=instance.pk)
+
+        for f in ("first_name", "middle_name", "last_name"):
+            if f in u:
+                setattr(instance, f, u.get(f, "") or "")
+
+        instance.save()
+
+        # profile update (create if missing)
+        p = validated_data.get("profile")
+        if p is not None:
+            profile, _ = Profile.objects.get_or_create(user=instance, defaults={"school": school})
+            if profile.school_id != school.id:
+                profile.school = school
+
+            if "date_of_birth_ad" in p:
+                profile.date_of_birth_in_ad = p.get("date_of_birth_ad")
+            if "date_of_birth_bs" in p:
+                profile.date_of_birth_in_bs = p.get("date_of_birth_bs", "") or ""
+
+            for src, dst in [
+                ("gender", "gender"),
+                ("blood_group", "blood_group"),
+                ("nationality", "nationality"),
+                ("religion", "religion"),
+                ("mother_tongue", "mother_tongue"),
+                ("citizenship_no", "citizenship_no"),
+                ("pan_no", "pan_no"),
+            ]:
+                if src in p:
+                    setattr(profile, dst, p.get(src, "") or "")
+
+            profile.save()
+
+        # addresses: replace all if provided
+        addrs = validated_data.get("addresses")
+        if addrs is not None:
+            profile = instance.profile
+            profile.addresses.all().delete()
+            for a in addrs:
+                Address.objects.create(profile=profile, **a)
+
+        # documents: upsert per type if provided
+        docs = validated_data.get("documents")
+        if docs is not None:
+            profile = instance.profile
+            for doc_type, payload in docs.items():
+                if doc_type not in [x[0] for x in DocumentType.choices]:
+                    raise ValidationError({"documents": [f"Invalid document type: {doc_type}"]})
+
+                file_id = payload.get("file")
+                if not UploadedFile.objects.filter(id=file_id).exists():
+                    raise ValidationError({"documents": {doc_type: ["Invalid file id."]}})
+
+                ProfileDocument.objects.update_or_create(
+                    profile=profile,
+                    document_type=doc_type,
+                    defaults={
+                        "file_id": file_id,
+                        "issued_by": payload.get("issued_by", ""),
+                        "issued_date": payload.get("issued_date"),
+                        "expiry_date": payload.get("expiry_date"),
+                        "remarks": payload.get("remarks", ""),
+                    },
+                )
+
+        return instance
 
 class StaffUpdateSerializer(serializers.Serializer):
     role = serializers.CharField(required=False)  # optionally allow role change (validated)

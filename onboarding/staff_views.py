@@ -95,7 +95,7 @@ class StaffUserViewSet(
 
     # filter configuration
     public_filter_meta = {
-        "status": "Status (active / inactive / all)",
+        "status": "Status (active / inactive / draft/ deleted /all)",
         "role": "Role (teacher / coordinator / etc.)",
     }
     filterable_fields = public_filter_meta
@@ -126,6 +126,10 @@ class StaffUserViewSet(
             qs = qs.filter(status=UserStatus.ACTIVE)
         elif status_filter == "inactive":
             qs = qs.filter(status=UserStatus.INACTIVE)
+        elif status_filter == "draft":
+            qs = qs.filter(status=UserStatus.DRAFT)
+        elif status_filter == "deleted":
+            qs = qs.filter(status=UserStatus.DELETED)
         elif status_filter == "all":
             pass
         else:
@@ -151,27 +155,19 @@ class StaffUserViewSet(
     def create(self, request, *args, **kwargs):
         serializer = StaffCreateUpdateSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        obj = serializer.save()  # serializer.create returns a dict? better to return User instance; see note below.
+        user = serializer.save()  # ✅ now returns User instance
 
-        # If your create() currently returns dict, change it to return user instance.
-        # Here we handle both:
-        if isinstance(obj, User):
-            return Response(
-                {"message": "Staff user created successfully.", "data": StaffUserReadSerializer(obj).data},
-                status=status.HTTP_201_CREATED,
-            )
-
-        # fallback: obj is dict
         return Response(
-            {"message": "Staff user created successfully.", "data": obj},
+            {"message": "Staff user created successfully.", "data": StaffUserReadSerializer(user).data},
             status=status.HTTP_201_CREATED,
         )
 
     def update(self, request, *args, **kwargs):
         user: User = self.get_object()
 
-        if user.status != UserStatus.ACTIVE:
-            raise ValidationError({"detail": "Only ACTIVE staff users can be updated."})
+        # ✅ allow update for ACTIVE or DRAFT (because teachers start as DRAFT)
+        if user.status not in (UserStatus.ACTIVE, UserStatus.DRAFT):
+            raise ValidationError({"detail": "Only ACTIVE or DRAFT staff users can be updated."})
 
         serializer = StaffUpdateSerializer(
             instance=user,
@@ -190,8 +186,9 @@ class StaffUserViewSet(
     def partial_update(self, request, *args, **kwargs):
         user: User = self.get_object()
 
-        if user.status != UserStatus.ACTIVE:
-            raise ValidationError({"detail": "Only ACTIVE staff users can be updated."})
+        # ✅ allow update for ACTIVE or DRAFT (because teachers start as DRAFT)
+        if user.status not in (UserStatus.ACTIVE, UserStatus.DRAFT):
+            raise ValidationError({"detail": "Only ACTIVE or DRAFT staff users can be updated."})
 
         serializer = StaffUpdateSerializer(
             instance=user,
@@ -210,6 +207,7 @@ class StaffUserViewSet(
     def destroy(self, request, *args, **kwargs):
         user: User = self.get_object()
 
+        # (keep your rule as-is)
         if user.status != UserStatus.ACTIVE:
             raise ValidationError({"detail": "Only ACTIVE staff users can be deleted."})
 

@@ -4,6 +4,7 @@ from .models import TeacherLevel, TeacherLevelStatus, TeacherSpecialization
 from subjects.models import Subject
 from accounts.models import User
 from django.db import transaction
+from common.constants import UserStatus, UserRole
 
 
 class TeacherLevelReadSerializer(serializers.ModelSerializer):
@@ -98,8 +99,19 @@ class TeacherSpecializationWriteSerializer(serializers.Serializer):
     )
 
     def validate_user(self, value):
-        if not User.objects.filter(id=value).exists():
+        try:
+            user = User.objects.get(id=value, is_deleted=False)
+        except User.DoesNotExist:
             raise serializers.ValidationError("User not found.")
+
+        if user.role != UserRole.TEACHER and user.role != "teacher":
+            raise serializers.ValidationError("Only teacher users can be specialized.")
+
+        if user.status != UserStatus.DRAFT and user.status != "draft":
+            raise serializers.ValidationError("User must be in DRAFT status to create specialization.")
+
+        # attach user instance for later use
+        self.context["_user_obj"] = user
         return value
 
     def validate_teacher_level(self, value):
@@ -125,7 +137,14 @@ class TeacherSpecializationWriteSerializer(serializers.Serializer):
         teacher_level_id = validated_data.get("teacher_level", None)
         subject_ids = validated_data.get("subjects", [])
 
-        # UniqueConstraint(user) -> enforce friendly error
+        user: User = self.context.get("_user_obj") or User.objects.select_for_update().get(id=user_id)
+
+        user.refresh_from_db()
+        if str(user.status).lower() != "draft":
+            raise serializers.ValidationError({"user": ["User is not in DRAFT status."]})
+        if str(user.role).lower() != "teacher":
+            raise serializers.ValidationError({"user": ["Only teacher users are allowed."]})
+
         if TeacherSpecialization.objects.filter(user_id=user_id).exists():
             raise serializers.ValidationError({"user": ["Specialization already exists for this teacher."]})
 
@@ -134,17 +153,18 @@ class TeacherSpecializationWriteSerializer(serializers.Serializer):
             teacher_level_id=teacher_level_id,
         )
 
-        if subject_ids is not None:
-            obj.subjects.set(subject_ids)
+        obj.subjects.set(subject_ids or [])
+
+        user.status = UserStatus.ACTIVE if hasattr(UserStatus, "ACTIVE") else "active"
+        user.is_active = True
+        user.save(update_fields=["status", "is_active"])
 
         return obj
 
     @transaction.atomic
     def update(self, instance: TeacherSpecialization, validated_data):
-        # For update we allow changing teacher_level and subjects.
-        # user change is allowed only if you want; safest is to disallow.
+        # keep your existing behavior (update specialization only)
         if "user" in validated_data and validated_data["user"] != instance.user_id:
-            # If you want to allow changing user, remove this and handle unique constraint.
             raise serializers.ValidationError({"user": ["Changing user is not allowed."]})
 
         if "teacher_level" in validated_data:

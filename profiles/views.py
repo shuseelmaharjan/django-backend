@@ -4,7 +4,7 @@ from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import mixins, status, viewsets, filters
 from rest_framework.response import Response
 
-from common.permissions import IsPlatformSuperAdmin, IsAuthenticatedAndActive
+from common.permissions import IsPlatformSuperAdmin, IsAuthenticatedAndActive, IsSchoolAdmin
 from .models import TeacherLevel, TeacherLevelStatus, TeacherSpecialization
 from .serializers import (
     TeacherLevelCreateSerializer,
@@ -136,7 +136,7 @@ class TeacherSpecializationViewSet(
     def get_permissions(self):
         if self.action in ("list", "retrieve"):
             return [IsAuthenticatedAndActive()]
-        return [IsPlatformSuperAdmin()]
+        return [IsSchoolAdmin()]
 
     def get_queryset(self):
         qs = (
