@@ -14,8 +14,8 @@ from common.mixins import ListFilterMetaMixin
 from common.permissions import IsSchoolManagement
 from utils.get_school_id_by_token import get_school_for_user
 
-from profiles.models import Profile, TeacherSpecialization
-from profiles.serializers_teacher_list import TeacherListSerializer
+from profiles.models import Profile, TeacherSpecialization, ProfileDocument
+from profiles.serializers_teacher_list import TeacherFullSerializer
 
 
 @extend_schema_view(
@@ -42,28 +42,24 @@ from profiles.serializers_teacher_list import TeacherListSerializer
                 type=str,
             ),
         ],
-        responses={200: TeacherListSerializer(many=True)},
+        responses={200: TeacherFullSerializer(many=True)},
     )
 )
 class TeacherListViewSet(
     ListFilterMetaMixin,
     mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
     viewsets.GenericViewSet,
 ):
-    """
-    Returns teachers for the request user's school (derived from token).
-    Only accessible by Principal/Admin/Vice Principal/Coordinator (and platform superadmin bypass).
-    """
     permission_classes = [IsAuthenticated, IsSchoolManagement]
-    serializer_class = TeacherListSerializer
+    serializer_class = TeacherFullSerializer
     pagination_class = MetaPageNumberPagination
+    lookup_field = "id"
 
-    # Search (ListFilterMetaMixin uses these patterns in your codebase)
     search_fields = ["first_name", "middle_name", "last_name", "phone", "email"]
     searchable_fields = search_fields
     search_param_name = "search"
 
-    # Ordering
     ordering_param_name = "ordering"
     ordering_fields = ["first_name", "last_name", "phone", "created_at"]
     public_sort_meta = {
@@ -74,7 +70,6 @@ class TeacherListViewSet(
     }
     sortable_fields = public_sort_meta
 
-    # Filters meta (for your frontend filter UI)
     public_filter_meta = {
         "teacher_level": "Teacher level id (UUID)",
         "has_level": "Has teacher level (true/false)",
@@ -90,25 +85,41 @@ class TeacherListViewSet(
     def get_queryset(self):
         school = get_school_for_user(self.request.user)
 
-        # Base: teachers that belong to this school (via Profile.school)
         qs = (
             User.objects
             .filter(
                 role=UserRole.TEACHER,
                 status=UserStatus.ACTIVE,
-                is_deleted=False,  # if SoftDeleteModel uses this flag (you referenced it in constraints)
-                profile__school=school,
+                is_deleted=False,
+                profile__school=school,     # ✅ ensures Profile exists + school scoped
             )
-            .select_related("profile")
+            .select_related(
+                "profile",
+                "profile_picture_file",     # ✅ if you want profile picture file info
+            )
         )
 
-        # Bring teacher specialization (and teacher_level) efficiently
-        teacher_spec_qs = TeacherSpecialization.objects.select_related("teacher_level")
+        # Teacher specialization (unique per user) + level + subjects
+        teacher_spec_qs = (
+            TeacherSpecialization.objects
+            .select_related("teacher_level")
+            .prefetch_related("subjects")
+        )
         qs = qs.prefetch_related(
-            Prefetch("teacher_specializations", queryset=teacher_spec_qs, to_attr="_pref_teacher_specs")
+            Prefetch("teacher_specializations", queryset=teacher_spec_qs)
         )
 
-        # Apply teacher_level filter (TeacherSpecialization is unique per user in your model)
+        # Profile relations
+        qs = qs.prefetch_related(
+            "profile__addresses",
+            "profile__guardians",
+            Prefetch(
+                "profile__documents",
+                queryset=ProfileDocument.objects.select_related("file"),
+            ),
+        )
+
+        # Filters
         teacher_level_id = self._teacher_level_filter()
         if teacher_level_id:
             qs = qs.filter(teacher_specializations__teacher_level_id=teacher_level_id)
@@ -122,10 +133,5 @@ class TeacherListViewSet(
             pass
         else:
             raise ValidationError({"has_level": ["Invalid value. Use true/false."]})
-
-        # attach single spec to each user for serializer convenience
-        # (prefetch puts list on _pref_teacher_specs)
-        for u in qs:
-            u._teacher_spec = (u._pref_teacher_specs[0] if getattr(u, "_pref_teacher_specs", []) else None)
 
         return qs.distinct()
