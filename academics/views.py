@@ -6,7 +6,7 @@ from rest_framework import mixins, status, viewsets, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from academics.models import AcademicClass, Section, StudentEnrollments
+from academics.models import AcademicClass, Section, StudentEnrollments, Schedule
 from academics.serializers import (
     AcademicClassCreateSerializer, AcademicClassUpdateSerializer, AcademicClassReadSerializer,
     AcademicClassReorderSerializer,
