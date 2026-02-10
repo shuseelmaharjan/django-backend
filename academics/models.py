@@ -200,3 +200,51 @@ class StudentEnrollments(models.Model):
 
     def __str__(self):
         return f"{self.student_id} -> {self.academic_class_id} ({self.batch_id})"
+
+class Schedule(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    batch = models.ForeignKey(
+        "batch.AcademicBatch",
+        on_delete=models.CASCADE,
+        related_name="schedules",
+        db_index=True,
+    )
+    academic_class = models.ForeignKey(
+        "academics.AcademicClass",
+        on_delete=models.CASCADE,
+        related_name="schedules",
+        db_index=True,
+    )
+    section = models.ForeignKey(
+        "academics.Section",
+        on_delete=models.CASCADE,
+        related_name="schedules",
+        db_index=True,
+        null=True,
+        blank=True,
+    )
+    subject = models.ForeignKey(
+        "subjects.Subject",
+        on_delete=models.CASCADE,
+        related_name="schedules",
+        db_index=True,
+    )
+    teacher = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="schedules",
+        db_index=True,
+    )
+    day_of_week = models.PositiveSmallIntegerField()  # 0=Monday, 6=Sunday
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["batch", "academic_class", "section"]),
+            models.Index(fields=["teacher"]),
+            models.Index(fields=["day_of_week"]),
+        ]
+
+    def __str__(self):
+        return f"{self.academic_class.name} - {self.subject.name} by {self.teacher.get_full_name()} on {self.get_day_of_week_display()} from {self.start_time} to {self.end_time}"
