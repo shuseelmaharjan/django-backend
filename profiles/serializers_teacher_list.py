@@ -3,6 +3,7 @@ from rest_framework import serializers
 from accounts.models import User
 from profiles.models import Profile, Address, Guardian, ProfileDocument, TeacherSpecialization
 from filehandler.serializers import UploadedFileSerializer
+from subjects.serializers import SubjectReadSerializer
 
 
 class AddressSerializer(serializers.ModelSerializer):
@@ -67,12 +68,15 @@ class TeacherSpecializationSerializer(serializers.ModelSerializer):
     teacher_level_id = serializers.SerializerMethodField()
     teacher_level = serializers.SerializerMethodField()
     subject_ids = serializers.SerializerMethodField()
+    subjects = SubjectReadSerializer(many=True, read_only=True)
+
 
     class Meta:
         model = TeacherSpecialization
         fields = [
             "teacher_level_id",
             "teacher_level",
+            "subjects",
             "subject_ids",
         ]
 
@@ -97,6 +101,7 @@ class TeacherFullSerializer(serializers.ModelSerializer):
 
     # Teacher specialization (unique per user)
     specialization = serializers.SerializerMethodField()
+
 
     class Meta:
         model = User
