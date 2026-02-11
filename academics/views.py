@@ -333,8 +333,12 @@ class ScheduleViewSet(
         if batch_id:
             qs = qs.filter(batch_id=batch_id)
 
+        # class_id = (self.request.query_params.get("academic_class") or "").strip()
+        # if class_id:
+        #     qs = qs.filter(academic_class_id=class_id)
+
         class_id = (self.request.query_params.get("academic_class") or "").strip()
-        if class_id:
+        if class_id and class_id != "all":
             qs = qs.filter(academic_class_id=class_id)
 
         section_id = (self.request.query_params.get("section") or "").strip()
