@@ -5,6 +5,8 @@ from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiPara
 from rest_framework import mixins, status, viewsets, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from uuid import UUID
+from rest_framework.exceptions import ValidationError
 
 from academics.models import AcademicClass, Section, StudentEnrollments, Schedule
 from academics.serializers import (
@@ -113,11 +115,26 @@ class SectionViewSet(
 
     def get_queryset(self):
         school = get_school_for_user(self.request.user)
-        return (
+
+        qs = (
             Section.objects
             .select_related("academic_class__batch__school")
             .filter(academic_class__batch__school=school)
         )
+
+        academic_class_id = self.request.query_params.get("academic_class_id")
+        if academic_class_id:
+            # (Optional) validate UUID to avoid silent weird behavior
+            try:
+                UUID(academic_class_id)
+            except ValueError:
+                raise ValidationError({"academic_class_id": "Invalid UUID."})
+
+            qs = qs.filter(academic_class_id=academic_class_id)  # or academic_class__id=...
+
+        return qs
+
+
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -251,7 +268,8 @@ class StudentEnrollmentViewSet(
             OpenApiParameter(name="section", required=False, type=str, description="Section UUID"),
             OpenApiParameter(name="teacher", required=False, type=str, description="Teacher UUID"),
             OpenApiParameter(name="day_of_week", required=False, type=int, description="0=Mon..6=Sun"),
-            OpenApiParameter(name="search", required=False, type=str, description="Search class/subject/teacher"),
+            OpenApiParameter(name="kind", required=False, type=str, description="class|break|holiday"),
+            OpenApiParameter(name="search", required=False, type=str, description="Search class/subject/teacher/title"),
             OpenApiParameter(name="ordering", required=False, type=str, description="ordering fields"),
         ],
     ),
@@ -274,6 +292,7 @@ class ScheduleViewSet(
 
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = [
+        "title",
         "academic_class__name",
         "section__name",
         "subject__name",
@@ -284,12 +303,14 @@ class ScheduleViewSet(
         "teacher__email",
     ]
     ordering_fields = [
+        "kind",
         "day_of_week",
         "start_time",
         "end_time",
         "academic_class__name",
         "subject__name",
         "teacher__first_name",
+        "title",
     ]
     ordering = ["day_of_week", "start_time"]
 
@@ -323,6 +344,10 @@ class ScheduleViewSet(
         teacher_id = (self.request.query_params.get("teacher") or "").strip()
         if teacher_id:
             qs = qs.filter(teacher_id=teacher_id)
+
+        kind = (self.request.query_params.get("kind") or "").strip()
+        if kind:
+            qs = qs.filter(kind=kind)
 
         day = (self.request.query_params.get("day_of_week") or "").strip()
         if day != "":

@@ -201,19 +201,30 @@ class StudentEnrollments(models.Model):
     def __str__(self):
         return f"{self.student_id} -> {self.academic_class_id} ({self.batch_id})"
 
+class ScheduleKind(models.TextChoices):
+    CLASS = "class", "Class"
+    BREAK = "break", "Break"
+    HOLIDAY = "holiday", "Holiday"
+
+
 class Schedule(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
     batch = models.ForeignKey(
         "batch.AcademicBatch",
         on_delete=models.CASCADE,
         related_name="schedules",
         db_index=True,
     )
+
+    # Scope (can be NULL to apply to entire batch for that day/time)
     academic_class = models.ForeignKey(
         "academics.AcademicClass",
         on_delete=models.CASCADE,
         related_name="schedules",
         db_index=True,
+        null=True,
+        blank=True,
     )
     section = models.ForeignKey(
         "academics.Section",
@@ -223,28 +234,46 @@ class Schedule(models.Model):
         null=True,
         blank=True,
     )
+
+    # Only for kind=CLASS
     subject = models.ForeignKey(
         "subjects.Subject",
         on_delete=models.CASCADE,
         related_name="schedules",
         db_index=True,
+        null=True,
+        blank=True,
     )
     teacher = models.ForeignKey(
         "accounts.User",
         on_delete=models.CASCADE,
         related_name="schedules",
         db_index=True,
+        null=True,
+        blank=True,
     )
+
+    kind = models.CharField(
+        max_length=10,
+        choices=ScheduleKind.choices,
+        default=ScheduleKind.CLASS,
+        db_index=True,
+    )
+
+    title = models.CharField(max_length=255, blank=True, default="")  # e.g. "Lunch Break", "Weekly Off"
+
     day_of_week = models.PositiveSmallIntegerField()  # 0=Monday, 6=Sunday
     start_time = models.TimeField()
     end_time = models.TimeField()
 
     class Meta:
         indexes = [
+            models.Index(fields=["batch"]),
             models.Index(fields=["batch", "academic_class", "section"]),
             models.Index(fields=["teacher"]),
             models.Index(fields=["day_of_week"]),
+            models.Index(fields=["kind"]),
         ]
 
     def __str__(self):
-        return f"{self.academic_class.name} - {self.subject.name} by {self.teacher.get_full_name()} on {self.get_day_of_week_display()} from {self.start_time} to {self.end_time}"
+        return f"{self.kind} on {self.day_of_week} {self.start_time}-{self.end_time}"
