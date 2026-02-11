@@ -82,6 +82,9 @@ class TeacherListViewSet(
     def _has_level_filter(self):
         return (self.request.query_params.get("has_level") or "").strip().lower()
 
+    def _subject_id_filter(self):
+        return (self.request.query_params.get("subject_id") or "").strip()
+
     def get_queryset(self):
         school = get_school_for_user(self.request.user)
 
@@ -108,6 +111,9 @@ class TeacherListViewSet(
         qs = qs.prefetch_related(
             Prefetch("teacher_specializations", queryset=teacher_spec_qs)
         )
+        subject_id = self._subject_id_filter()
+        if subject_id:
+            qs = qs.filter(teacher_specializations__subjects__id=subject_id)
 
         # Profile relations
         qs = qs.prefetch_related(

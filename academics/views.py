@@ -1,20 +1,24 @@
 # academics/views.py
 from __future__ import annotations
 
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 from rest_framework import mixins, status, viewsets, filters
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from uuid import UUID
+from rest_framework.exceptions import ValidationError
 
-from academics.models import AcademicClass, Section, StudentEnrollments
+from academics.models import AcademicClass, Section, StudentEnrollments, Schedule
 from academics.serializers import (
     AcademicClassCreateSerializer, AcademicClassUpdateSerializer, AcademicClassReadSerializer,
     AcademicClassReorderSerializer,
     SectionCreateSerializer, SectionUpdateSerializer, SectionReadSerializer,
-    SectionReorderSerializer, StudentEnrollmentCreateSerializer, StudentEnrollmentUpdateSerializer, StudentEnrollmentReadSerializer
+    SectionReorderSerializer, StudentEnrollmentCreateSerializer, StudentEnrollmentUpdateSerializer, StudentEnrollmentReadSerializer,
+    ScheduleCreateSerializer,
+    ScheduleUpdateSerializer,
+    ScheduleReadSerializer,
 )
-from common.permissions import IsSchoolAdmin
+from common.permissions import IsSchoolAdmin, IsAuthenticatedAndActive
 from utils.get_school_id_by_token import get_school_for_user
 
 
@@ -34,7 +38,7 @@ class AcademicClassViewSet(
     mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
-    permission_classes = [IsAuthenticated, IsSchoolAdmin]
+    permission_classes = [IsAuthenticatedAndActive, IsSchoolAdmin]
     lookup_field = "pk"
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["name", "code", "batch"]
@@ -106,16 +110,31 @@ class SectionViewSet(
     mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
-    permission_classes = [IsAuthenticated, IsSchoolAdmin]
+    permission_classes = [IsAuthenticatedAndActive, IsSchoolAdmin]
     lookup_field = "pk"
 
     def get_queryset(self):
         school = get_school_for_user(self.request.user)
-        return (
+
+        qs = (
             Section.objects
             .select_related("academic_class__batch__school")
             .filter(academic_class__batch__school=school)
         )
+
+        academic_class_id = self.request.query_params.get("academic_class_id")
+        if academic_class_id:
+            # (Optional) validate UUID to avoid silent weird behavior
+            try:
+                UUID(academic_class_id)
+            except ValueError:
+                raise ValidationError({"academic_class_id": "Invalid UUID."})
+
+            qs = qs.filter(academic_class_id=academic_class_id)  # or academic_class__id=...
+
+        return qs
+
+
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -171,7 +190,7 @@ class StudentEnrollmentViewSet(
     mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
-    permission_classes = [IsAuthenticated, IsSchoolAdmin]
+    permission_classes = [IsAuthenticatedAndActive, IsSchoolAdmin]
     lookup_field = "pk"
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["student__first_name", "student__last_name", "student__phone", "student__email"]
@@ -238,3 +257,133 @@ class StudentEnrollmentViewSet(
         s.is_valid(raise_exception=True)
         obj = s.save()
         return Response({"message": "Enrollment updated.", "data": StudentEnrollmentReadSerializer(obj).data})
+
+
+@extend_schema_view(
+    list=extend_schema(
+        tags=["Schedule"],
+        parameters=[
+            OpenApiParameter(name="batch", required=False, type=str, description="Batch ID"),
+            OpenApiParameter(name="academic_class", required=False, type=str, description="Class UUID"),
+            OpenApiParameter(name="section", required=False, type=str, description="Section UUID"),
+            OpenApiParameter(name="teacher", required=False, type=str, description="Teacher UUID"),
+            OpenApiParameter(name="day_of_week", required=False, type=int, description="0=Mon..6=Sun"),
+            OpenApiParameter(name="kind", required=False, type=str, description="class|break|holiday"),
+            OpenApiParameter(name="search", required=False, type=str, description="Search class/subject/teacher/title"),
+            OpenApiParameter(name="ordering", required=False, type=str, description="ordering fields"),
+        ],
+    ),
+    create=extend_schema(tags=["Schedule"], request=ScheduleCreateSerializer),
+    retrieve=extend_schema(tags=["Schedule"]),
+    update=extend_schema(tags=["Schedule"], request=ScheduleUpdateSerializer),
+    partial_update=extend_schema(tags=["Schedule"], request=ScheduleUpdateSerializer),
+    destroy=extend_schema(tags=["Schedule"]),
+)
+class ScheduleViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    permission_classes = [IsAuthenticatedAndActive, IsSchoolAdmin]
+    lookup_field = "pk"
+
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = [
+        "title",
+        "academic_class__name",
+        "section__name",
+        "subject__name",
+        "subject__code",
+        "teacher__first_name",
+        "teacher__last_name",
+        "teacher__phone",
+        "teacher__email",
+    ]
+    ordering_fields = [
+        "kind",
+        "day_of_week",
+        "start_time",
+        "end_time",
+        "academic_class__name",
+        "subject__name",
+        "teacher__first_name",
+        "title",
+    ]
+    ordering = ["day_of_week", "start_time"]
+
+    def get_queryset(self):
+        school = get_school_for_user(self.request.user)
+
+        qs = (
+            Schedule.objects
+            .select_related(
+                "batch__school",
+                "academic_class",
+                "section",
+                "subject",
+                "teacher",
+            )
+            .filter(batch__school=school)
+        )
+
+        batch_id = (self.request.query_params.get("batch") or "").strip()
+        if batch_id:
+            qs = qs.filter(batch_id=batch_id)
+
+        class_id = (self.request.query_params.get("academic_class") or "").strip()
+        if class_id:
+            qs = qs.filter(academic_class_id=class_id)
+
+        section_id = (self.request.query_params.get("section") or "").strip()
+        if section_id:
+            qs = qs.filter(section_id=section_id)
+
+        teacher_id = (self.request.query_params.get("teacher") or "").strip()
+        if teacher_id:
+            qs = qs.filter(teacher_id=teacher_id)
+
+        kind = (self.request.query_params.get("kind") or "").strip()
+        if kind:
+            qs = qs.filter(kind=kind)
+
+        day = (self.request.query_params.get("day_of_week") or "").strip()
+        if day != "":
+            try:
+                qs = qs.filter(day_of_week=int(day))
+            except ValueError:
+                qs = qs.none()
+
+        return qs
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return ScheduleCreateSerializer
+        if self.action in ("update", "partial_update"):
+            return ScheduleUpdateSerializer
+        return ScheduleReadSerializer
+
+    def create(self, request, *args, **kwargs):
+        s = ScheduleCreateSerializer(data=request.data, context={"request": request})
+        s.is_valid(raise_exception=True)
+        obj = s.save()
+        return Response(
+            {"message": "Schedule created.", "data": ScheduleReadSerializer(obj).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    def update(self, request, *args, **kwargs):
+        obj = self.get_object()
+        s = ScheduleUpdateSerializer(instance=obj, data=request.data, partial=False, context={"request": request})
+        s.is_valid(raise_exception=True)
+        obj = s.save()
+        return Response({"message": "Schedule updated.", "data": ScheduleReadSerializer(obj).data})
+
+    def partial_update(self, request, *args, **kwargs):
+        obj = self.get_object()
+        s = ScheduleUpdateSerializer(instance=obj, data=request.data, partial=True, context={"request": request})
+        s.is_valid(raise_exception=True)
+        obj = s.save()
+        return Response({"message": "Schedule updated.", "data": ScheduleReadSerializer(obj).data})
