@@ -86,44 +86,6 @@ class Section(models.Model):
     def __str__(self):
         return f"{self.academic_class.name} - {self.name}"
 
-# class SubjectEnrollments(models.Model):
-#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-#     batch = models.ForeignKey(
-#         "batch.AcademicBatch",
-#         on_delete=models.CASCADE,
-#         related_name="subject_enrollments",
-#         db_index=True,
-#     )
-#     teacher = models.ForeignKey(
-#         "accounts.User",
-#         on_delete=models.CASCADE,
-#         related_name="subject_enrollments",
-#         db_index=True,
-#     )
-#     subject = models.ForeignKey(
-#         "subjects.Subject",
-#         on_delete=models.CASCADE,
-#         related_name="enrollments",
-#         db_index=True,
-#     )
-#     academic_class = models.ForeignKey(
-#         "academics.AcademicClass",
-#         on_delete=models.CASCADE,
-#         related_name="subject_enrollments",
-#         db_index=True,
-#     )
-#     section = models.ForeignKey(
-#         "academics.Section",
-#         on_delete=models.CASCADE,
-#         related_name="subject_enrollments",
-#         db_index=True,
-#         null=True,
-#         blank=True,
-#     )
-#     enrolled_at = models.DateTimeField(auto_now_add=True)
-#     credit_hours = models.PositiveSmallIntegerField(default=0)
-#     publication = models.TextField(blank=True, null=True)
-
 
 class StudentEnrollments(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
