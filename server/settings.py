@@ -75,6 +75,7 @@ INSTALLED_APPS = [
     'fees',
     'subjects',
     'exams',
+    'eca',
 ]
 
 
