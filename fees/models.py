@@ -5,6 +5,8 @@ import uuid
 from django.db import models
 from common.constants import Currency
 from django.core.exceptions import ValidationError
+from django.db.models import Q
+from decimal import Decimal
 
 # ---------------------------
 # Choices / Enums
@@ -210,3 +212,130 @@ class FeeStructure(models.Model):
 
     def __str__(self):
         return f"{self.school.code} | {self.fee_head.code} | {self.scope} | {self.period} | {self.amount} {self.currency}"
+
+
+class FeeInclude(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    fees = models.ForeignKey(
+        "fees.FeeStructure",
+        on_delete=models.CASCADE,
+        related_name="included_in",
+    )
+    user = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="fee_includes",
+    )
+    batch = models.ForeignKey(
+        "batch.AcademicBatch",
+        on_delete=models.CASCADE,
+        related_name="fee_includes",
+    )
+    classroom = models.ForeignKey(
+        "academics.AcademicClass",
+        on_delete=models.CASCADE,
+        related_name="fee_includes",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(
+        max_length=20,
+        choices=FeeStatus.choices,  # or FeeStatus.choices
+        default=FeeStatus.active,
+        db_index=True,
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["fees", "user", "batch", "classroom"],
+                condition=~Q(status=FeeStatus.deleted),
+                name="uq_fee_include_definition_not_deleted",
+            ),
+        ]
+    def __str__(self):
+        return f"{self.user} included in {self.fees} for {self.batch} - {self.classroom}"
+
+class StudentFeeWallet(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    student = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="fee_wallets",
+    )
+
+    batch = models.ForeignKey(
+        "batch.AcademicBatch",
+        on_delete=models.CASCADE,
+        related_name="fee_wallets",
+    )
+
+    academic_class = models.ForeignKey(
+        "academics.AcademicClass",
+        on_delete=models.CASCADE,
+        related_name="fee_wallets",
+    )
+
+    total_payable = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    total_paid = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    total_discount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    total_scholarship = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    total_due = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["student", "batch", "academic_class"],
+                name="uq_student_wallet_scope",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["student", "batch", "academic_class"]),
+        ]
+
+    def __str__(self):
+        return f"Wallet({self.student_id} {self.batch_id} {self.academic_class_id})"
+
+class FeeIncludeAuditAction(models.TextChoices):
+    CREATE = "create", "Create"
+    UPDATE = "update", "Update"
+    DELETE = "delete", "Delete"
+    UNDO = "undo", "Undo"
+
+class FeeIncludeAudit(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    fee_include = models.ForeignKey(
+        "fees.FeeInclude",
+        on_delete=models.CASCADE,
+        related_name="audits",
+    )
+
+    actor = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="fee_include_audits",
+    )
+
+    action = models.CharField(max_length=10, choices=FeeIncludeAuditAction.choices)
+
+    # store “before / after”
+    prev_status = models.CharField(max_length=20, blank=True, default="")
+    new_status = models.CharField(max_length=20, blank=True, default="")
+
+    prev_batch_id = models.IntegerField(null=True, blank=True)
+    new_batch_id = models.IntegerField(null=True, blank=True)
+
+    prev_class_id = models.UUIDField(null=True, blank=True)
+    new_class_id = models.UUIDField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["fee_include", "created_at"]),
+        ]
