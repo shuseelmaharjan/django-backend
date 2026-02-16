@@ -8,6 +8,7 @@ from academics.views import (
     StudentEnrollmentViewSet,
     ScheduleViewSet,
 )
+from academics.views_enroll import StudentEnrollAndSetupFeesAPI
 from academics.pdf_views import SchedulePdfView
 
 router = DefaultRouter()
@@ -19,5 +20,6 @@ router.register(r"schedules", ScheduleViewSet, basename="schedule")
 urlpatterns = [
     # put custom path BEFORE router to prevent /schedules/<pk>/ catching "pdf"
     path("schedules/pdf/", SchedulePdfView.as_view(), name="schedule-pdf"),
+    path("student-enrollments/enroll-and-setup-fees/", StudentEnrollAndSetupFeesAPI.as_view(), name="enroll-and-setup-fees"),
     path("", include(router.urls)),
 ]
