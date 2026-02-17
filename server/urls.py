@@ -50,6 +50,7 @@ urlpatterns = [
     path("api/v1/", include("profiles.urls")),
     path("api/v1/", include("exams.urls")),
     path("api/v1/", include("eca.urls")),
+    path("api/v1/", include("billing.urls")),
 
 
 

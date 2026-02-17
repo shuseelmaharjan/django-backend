@@ -114,6 +114,8 @@ class StudentUserViewSet(
             qs = qs.filter(status=UserStatus.INACTIVE)
         elif status_filter == "all":
             pass
+        elif status_filter == "draft":
+            qs = qs.filter(status=UserStatus.DRAFT)
         else:
             raise ValidationError({"status": ["Invalid value. Use: active, inactive, all."]})
 
