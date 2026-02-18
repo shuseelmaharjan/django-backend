@@ -184,6 +184,7 @@ class Student360ViewSet(
         # Prefetch enrollments ordered newest first (used for current_enrollment and meta)
         enroll_qs = (
             StudentEnrollments.objects.select_related("batch", "academic_class", "section")
+            .filter(status="enrolled")
             .order_by("-enrolled_at")
         )
         qs = qs.prefetch_related(Prefetch("enrollments", queryset=enroll_qs))
@@ -240,7 +241,7 @@ class Student360ViewSet(
         # -----------------------------
         # Enrollments: scope / filter
         # -----------------------------
-        enrollments_qs = student.enrollments.all()  # prefetched ordered desc
+        enrollments_qs = student.enrollments.filter(status="enrolled")
 
         if batch:
             enrollments_qs = enrollments_qs.filter(batch_id=batch.id)

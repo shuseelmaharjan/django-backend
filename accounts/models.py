@@ -3,18 +3,38 @@ import uuid
 from datetime import timedelta
 
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.models import AbstractUser, BaseUserManager
-from common.constants import UserStatus, UserRole
-from common.models import SoftDeleteModel
 from django.db.models import Q
 from django.utils import timezone
+
+from common.constants import UserStatus, UserRole
+from common.models import SoftDeleteModel
+
 
 def _gen_username_from_phone(phone: str) -> str:
     # simple default: "u_<last 8 digits>"
     digits = "".join(ch for ch in str(phone) if ch.isdigit())
     tail = digits[-8:] if len(digits) >= 8 else digits
     return f"u_{tail}" if tail else f"u_{uuid.uuid4().hex[:10]}"
+
+
+def _next_registration_no_for_year(year: int) -> str:
+    """
+    Generates: YYYY-000001 (global sequence per year)
+    If you want per-school sequence, we can scope it later.
+    """
+    prefix = f"{year}-"
+
+    last = (
+        User.objects.filter(is_deleted=False, registration_no__startswith=prefix)
+        .order_by("-registration_no")
+        .values_list("registration_no", flat=True)
+        .first()
+    )
+
+    last_no = int(last.split("-")[1]) if last else 0
+    return f"{year}-{last_no + 1:06d}"
 
 
 class UserManager(BaseUserManager):
@@ -26,6 +46,7 @@ class UserManager(BaseUserManager):
 
         try:
             from utils.phone_validator import clean_and_validate_phone
+
             phone = clean_and_validate_phone(phone)
         except Exception:
             phone = str(phone).strip()
@@ -66,6 +87,7 @@ class User(SoftDeleteModel, AbstractUser):
     - first/middle/last name
     - profile picture (UploadedFile)
     - auto-generated unique username (not used for login)
+    - permanent registration_no (symbol/registration id) generated once
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -104,6 +126,14 @@ class User(SoftDeleteModel, AbstractUser):
     # make username unique if you're autogenerating it
     username = models.CharField(max_length=150, unique=True, blank=True, default="")
 
+    registration_no = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        db_index=True,
+        editable=False,  # 🔒 not editable in admin/forms
+    )
+
     USERNAME_FIELD = "phone"
     REQUIRED_FIELDS = []
 
@@ -114,11 +144,20 @@ class User(SoftDeleteModel, AbstractUser):
         if self.phone:
             try:
                 from utils.phone_validator import clean_and_validate_phone
+
                 self.phone = clean_and_validate_phone(self.phone)
             except Exception:
                 self.phone = str(self.phone).strip()
 
     def save(self, *args, **kwargs):
+        creating = self._state.adding
+
+        # Make registration_no immutable (extra safety)
+        if not creating and self.pk:
+            old = User.objects.filter(pk=self.pk).values("registration_no").first()
+            if old and old.get("registration_no") and self.registration_no != old["registration_no"]:
+                self.registration_no = old["registration_no"]
+
         # Auto-generate username if missing
         if not self.username:
             base = _gen_username_from_phone(self.phone)
@@ -134,6 +173,29 @@ class User(SoftDeleteModel, AbstractUser):
             self.is_staff = True
 
         super().save(*args, **kwargs)
+
+        # If you want ONLY students to get it, uncomment the role condition below.
+        if creating and not self.registration_no:
+            # if self.role != UserRole.STUDENT:
+            #     return
+
+            with transaction.atomic():
+                year = timezone.now().year
+                prefix = f"{year}-"
+
+                # lock "the latest row" for this year to avoid duplicates in concurrent requests
+                (
+                    User.objects.select_for_update()
+                    .filter(is_deleted=False, registration_no__startswith=prefix)
+                    .order_by("-registration_no")
+                    .first()
+                )
+
+                reg = _next_registration_no_for_year(year)
+
+                # write directly without triggering recursion / re-save loops
+                User.objects.filter(pk=self.pk).update(registration_no=reg)
+                self.registration_no = reg  # keep instance consistent
 
     def soft_delete(self, *args, **kwargs):
         self.status = UserStatus.DELETED
@@ -162,7 +224,13 @@ class User(SoftDeleteModel, AbstractUser):
                 condition=Q(is_deleted=False) & ~Q(username=""),
                 name="uq_user_username_alive",
             ),
+            models.UniqueConstraint(
+                fields=["registration_no"],
+                condition=Q(is_deleted=False) & ~Q(registration_no=""),
+                name="uq_user_registration_no_alive",
+            ),
         ]
+
 
 class PasswordResetOTP(models.Model):
     """
