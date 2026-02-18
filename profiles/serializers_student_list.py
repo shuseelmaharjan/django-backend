@@ -124,6 +124,7 @@ class StudentFullSerializer(serializers.ModelSerializer):
             "username",
             "role",
             "status",
+            "registration_no",
             "first_name",
             "middle_name",
             "last_name",
