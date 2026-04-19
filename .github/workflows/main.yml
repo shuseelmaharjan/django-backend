@@ -23,23 +23,24 @@ jobs:
       - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
-          cat > ~/.ssh/id_ed25519 <<'EOF'
+          cat > ~/.ssh/id_rsa <<'EOF'
           ${{ secrets.GOLDEN_FUTURE_SERVER_SECRET }}
           EOF
-          chmod 600 ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H -p 22 "${{ secrets.CPANEL_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Validate private key
         run: |
-          ssh-keygen -l -f ~/.ssh/id_ed25519
+          ssh-keygen -l -f ~/.ssh/id_rsa
 
       - name: Test SSH login
         run: |
-          ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 -p 22 "${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }}" "pwd"
+          ssh -vvv -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -i ~/.ssh/id_rsa -p 22 "${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }}" "pwd"
 
       - name: Push to cPanel repository
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@users.noreply.github.com"
-          git remote add production "ssh://${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }}:22/${{ secrets.CPANEL_REPO_PATH }}"
+          git remote remove production || true
+          git remote add production "${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }}:${{ secrets.CPANEL_REPO_PATH }}"
           git push production HEAD:main --force
