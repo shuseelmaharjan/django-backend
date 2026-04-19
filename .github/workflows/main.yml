@@ -22,11 +22,11 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.GOLDEN_FUTURE_INSTITUTE_PRIVATE_SECRET }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -p ${{ secrets.CPANEL_PORT }} ${{ secrets.CPANEL_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -p 22 ${{ secrets.CPANEL_HOST }} >> ~/.ssh/known_hosts
 
       - name: Push to cPanel repository
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@users.noreply.github.com"
-          git remote add production "ssh://${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }}:${{ secrets.CPANEL_PORT }}/${{ secrets.CPANEL_REPO_PATH }}"
+          git remote add production "ssh://${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }}:22/${{ secrets.CPANEL_REPO_PATH }}"
           git push production HEAD:main --force
