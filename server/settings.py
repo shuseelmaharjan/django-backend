@@ -32,9 +32,9 @@ except Exception:
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-secret-key")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DJANGO_DEBUG", "0") == "1"
-
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost").split(",") if h.strip()]
+
+DEBUG = os.getenv("DJANGO_DEBUG", "0") == "1"
 
 # CORS settings
 CORS_ALLOWED_ORIGINS = [o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()]
