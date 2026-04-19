@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Validate secrets
         run: |
@@ -29,13 +31,9 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H -p 22 "${{ secrets.CPANEL_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Validate private key
-        run: |
-          ssh-keygen -l -f ~/.ssh/id_rsa
-
       - name: Test SSH login
         run: |
-          ssh -vvv -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -i ~/.ssh/id_rsa -p 22 "${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }}" "pwd"
+          ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -i ~/.ssh/id_rsa -p 22 "${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }}" "pwd"
 
       - name: Push to cPanel repository
         run: |
