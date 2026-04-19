@@ -5,10 +5,6 @@ on:
     branches:
       - main
 
-concurrency:
-  group: production-deploy
-  cancel-in-progress: true
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -17,16 +13,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate secrets
+        run: |
+          test -n "${{ secrets.GOLDEN_FUTURE_INSTITUTE_PRIVATE_SECRET }}" || (echo "Missing private key secret" && exit 1)
+          test -n "${{ secrets.CPANEL_HOST }}" || (echo "Missing CPANEL_HOST" && exit 1)
+          test -n "${{ secrets.CPANEL_USER }}" || (echo "Missing CPANEL_USER" && exit 1)
+
       - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.GOLDEN_FUTURE_INSTITUTE_PRIVATE_SECRET }}" > ~/.ssh/id_rsa
+          printf '%s\n' "${{ secrets.GOLDEN_FUTURE_INSTITUTE_PRIVATE_SECRET }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -p 22 ${{ secrets.CPANEL_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H -p 22 "${{ secrets.CPANEL_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Push to cPanel repository
+      - name: Test SSH login
         run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@users.noreply.github.com"
-          git remote add production "ssh://${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }}:22/${{ secrets.CPANEL_REPO_PATH }}"
-          git push production HEAD:main --force
+          ssh -o StrictHostKeyChecking=yes -i ~/.ssh/id_rsa -p 22 "${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }}" "pwd"
