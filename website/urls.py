@@ -41,5 +41,6 @@ router.register(r"v1/gallery-images", GalleryImageViewSet, basename="gallery-ima
 urlpatterns = [
     path("", include(router.urls)),
     path("test/", test_api),
+    path("", include("website.urls_public")),
 
 ]
