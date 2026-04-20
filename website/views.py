@@ -4,6 +4,7 @@ from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import mixins, status, viewsets, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.decorators import api_view
 
 from common.permissions import IsSchoolManagement, IsAuthenticatedAndActive
 from utils.get_school_id_by_token import get_school_for_user
@@ -1325,3 +1326,7 @@ class GalleryImageViewSet(
         obj = self.get_object()
         obj.delete()
         return Response({"message": "Gallery image deleted successfully."}, status=status.HTTP_200_OK)
+
+@api_view(['GET'])
+def test_api(request):
+    return Response({"message": "API is working!"})

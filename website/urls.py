@@ -17,6 +17,7 @@ from website.views import (
     FooterLinkViewSet,
     GalleryGroupViewSet,
     GalleryImageViewSet,
+    test_api,
 )
 
 router = DefaultRouter()
@@ -39,4 +40,6 @@ router.register(r"v1/gallery-images", GalleryImageViewSet, basename="gallery-ima
 
 urlpatterns = [
     path("", include(router.urls)),
+    path("test/", test_api),
+
 ]
