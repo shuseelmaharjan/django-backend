@@ -16,7 +16,8 @@ def set_refresh_cookie(response, refresh_token: str):
         secure=getattr(settings, "AUTHX_REFRESH_COOKIE_SECURE", False),
         samesite=getattr(settings, "AUTHX_REFRESH_COOKIE_SAMESITE", "Lax"),
         path=getattr(settings, "AUTHX_REFRESH_COOKIE_PATH", "/"),
-        max_age=max_age,  # this makes it NOT "Session"
+        domain=getattr(settings, "AUTHX_REFRESH_COOKIE_DOMAIN", None),  # NEW
+        max_age=max_age,
     )
 
 

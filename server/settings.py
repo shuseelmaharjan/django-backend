@@ -250,11 +250,24 @@ SPECTACULAR_SETTINGS = {
 
 # SimpleJWT settings
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+
 # Adjust cookie settings for production
 if ENVIRONMENT == "production":
     AUTHX_REFRESH_COOKIE_SECURE = True
     AUTHX_REFRESH_COOKIE_SAMESITE = "None"
 
+# Cookie domain (only for production)
+AUTHX_REFRESH_COOKIE_DOMAIN = (
+    ".goldenfutureinstitute.com.np"
+    if ENVIRONMENT == "production"
+    else None
+)
+
+# Secure flag
+AUTHX_REFRESH_COOKIE_SECURE = ENVIRONMENT == "production"
+
+# SameSite (adjust if needed)
+AUTHX_REFRESH_COOKIE_SAMESITE = "Lax" if ENVIRONMENT != "production" else "None"
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
