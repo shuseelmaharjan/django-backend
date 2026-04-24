@@ -22,12 +22,7 @@ from .models import (
 class FooterLinkSerializer(serializers.ModelSerializer):
     class Meta:
         model = FooterLink
-        fields = [
-            "id",
-            "name",
-            "url",
-            "created_at",
-        ]
+        fields = ["id", "name", "url", "created_at"]
 
 
 class FooterGroupSerializer(serializers.ModelSerializer):
@@ -35,39 +30,27 @@ class FooterGroupSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = FooterGroup
-        fields = [
-            "id",
-            "name",
-            "links",
-            "created_at",
-        ]
+        fields = ["id", "name", "links", "created_at"]
+
 
 
 class CourseSerializer(serializers.ModelSerializer):
-    image = UploadedFileSerializer(read_only=True)
+    image = serializers.SerializerMethodField()
 
     class Meta:
         model = Courses
-        fields = [
-            "id",
-            "name",
-            "slug",
-            "sort_order",
-            "is_popular",
-            "image",
-        ]
+        fields = ["id", "name", "slug", "sort_order", "is_popular", "image"]
+
+    def get_image(self, obj):
+        if not obj.image:
+            return None
+        return UploadedFileSerializer(obj.image, context=self.context).data
 
 
 class NavigationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Navigation
-        fields = [
-            "id",
-            "name",
-            "slug",
-            "sort_order",
-            "created_at",
-        ]
+        fields = ["id", "name", "slug", "sort_order", "created_at"]
 
 
 class NavigationCourseTreeSerializer(serializers.ModelSerializer):
@@ -75,22 +58,15 @@ class NavigationCourseTreeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Navigation
-        fields = [
-            "id",
-            "name",
-            "slug",
-            "sort_order",
-            "created_at",
-            "courses",
-        ]
+        fields = ["id", "name", "slug", "sort_order", "created_at", "courses"]
 
     def get_courses(self, obj):
         courses = obj.courses.filter(is_popular=True).order_by("sort_order", "created_at")
-        return CourseSerializer(courses, many=True).data
+        return CourseSerializer(courses, many=True, context=self.context).data
 
 
 class HomepageBannerSerializer(serializers.ModelSerializer):
-    image = UploadedFileSerializer(read_only=True)
+    image = serializers.SerializerMethodField()
 
     class Meta:
         model = HomepageBanner
@@ -105,84 +81,79 @@ class HomepageBannerSerializer(serializers.ModelSerializer):
             "button_link",
         ]
 
+    def get_image(self, obj):
+        if not obj.image:
+            return None
+        return UploadedFileSerializer(obj.image, context=self.context).data
+
 
 class IconsSerializer(serializers.ModelSerializer):
-    image = UploadedFileSerializer(read_only=True)
+    image = serializers.SerializerMethodField()
 
     class Meta:
         model = Icons
-        fields = [
-            "id",
-            "name",
-            "image",
-            "sort_order",
-        ]
+        fields = ["id", "name", "image", "sort_order"]
+
+    def get_image(self, obj):
+        if not obj.image:
+            return None
+        return UploadedFileSerializer(obj.image, context=self.context).data
 
 
 class PrincipalMessageSerializer(serializers.ModelSerializer):
-    image = UploadedFileSerializer(read_only=True)
+    image = serializers.SerializerMethodField()
 
     class Meta:
         model = PrincipalMessage
-        fields = [
-            "title",
-            "message",
-            "image",
-        ]
+        fields = ["title", "message", "image"]
+
+    def get_image(self, obj):
+        if not obj.image:
+            return None
+        return UploadedFileSerializer(obj.image, context=self.context).data
 
 
 class TestimonialSerializer(serializers.ModelSerializer):
-    image = UploadedFileSerializer(read_only=True)
+    image = serializers.SerializerMethodField()
 
     class Meta:
         model = Testimonial
-        fields = [
-            "name",
-            "role",
-            "message",
-            "image",
-            "created_at",
-        ]
+        fields = ["name", "role", "message", "image", "created_at"]
+
+    def get_image(self, obj):
+        if not obj.image:
+            return None
+        return UploadedFileSerializer(obj.image, context=self.context).data
 
 
 class AdsSerializer(serializers.ModelSerializer):
-    image = UploadedFileSerializer(read_only=True)
+    image = serializers.SerializerMethodField()
 
     class Meta:
         model = Ads
-        fields = [
-            "id",
-            "title",
-            "description",
-            "image",
-            "link_url",
-        ]
+        fields = ["id", "title", "description", "image", "link_url"]
+
+    def get_image(self, obj):
+        if not obj.image:
+            return None
+        return UploadedFileSerializer(obj.image, context=self.context).data
 
 
 class EventsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Events
-        fields = [
-            "title",
-            "description",
-            "event_date",
-        ]
+        fields = ["title", "description", "event_date"]
 
 
 class BlogsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Blogs
-        fields = [
-            "id",
-            "title",
-            "content",
-            "author",
-            "published_at",
-        ]
+        fields = ["id", "title", "content", "author", "published_at"]
+
 
 class CourseFullSerializer(serializers.ModelSerializer):
-    image = UploadedFileSerializer(read_only=True)
-    banner = UploadedFileSerializer(read_only=True)
+    image = serializers.SerializerMethodField()
+    banner = serializers.SerializerMethodField()
 
     class Meta:
         model = Courses
@@ -197,6 +168,16 @@ class CourseFullSerializer(serializers.ModelSerializer):
             "image",
             "banner",
         ]
+
+    def get_image(self, obj):
+        if not obj.image:
+            return None
+        return UploadedFileSerializer(obj.image, context=self.context).data
+
+    def get_banner(self, obj):
+        if not obj.banner:
+            return None
+        return UploadedFileSerializer(obj.banner, context=self.context).data
 
 
 class CareersSerializer(serializers.ModelSerializer):
@@ -214,30 +195,29 @@ class CareersSerializer(serializers.ModelSerializer):
 
 
 class AboutUsSerializer(serializers.ModelSerializer):
-    image = UploadedFileSerializer(read_only=True)
+    image = serializers.SerializerMethodField()
 
     class Meta:
         model = AboutUs
-        fields = [
-            "id",
-            "title",
-            "description",
-            "image",
-            "created_at",
-        ]
+        fields = ["id", "title", "description", "image", "created_at"]
+
+    def get_image(self, obj):
+        if not obj.image:
+            return None
+        return UploadedFileSerializer(obj.image, context=self.context).data
 
 
 class GalleryImageSerializer(serializers.ModelSerializer):
-    image = UploadedFileSerializer(read_only=True)
+    image = serializers.SerializerMethodField()
 
     class Meta:
         model = GalleryImage
-        fields = [
-            "id",
-            "image",
-            "caption",
-            "created_at",
-        ]
+        fields = ["id", "image", "caption", "created_at"]
+
+    def get_image(self, obj):
+        if not obj.image:
+            return None
+        return UploadedFileSerializer(obj.image, context=self.context).data
 
 
 class GalleryGroupSerializer(serializers.ModelSerializer):
@@ -245,9 +225,54 @@ class GalleryGroupSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = GalleryGroup
+        fields = ["id", "name", "images", "created_at"]
+
+class CourseListByNavigationCourseSerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField()
+    banner = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Courses
         fields = [
             "id",
             "name",
-            "images",
-            "created_at",
+            "description",
+            "slug",
+            "sort_order",
+            "tags",
+            "is_popular",
+            "image",
+            "banner",
         ]
+
+    def get_image(self, obj):
+        if not obj.image:
+            return None
+        return UploadedFileSerializer(obj.image, context=self.context).data
+
+    def get_banner(self, obj):
+        if not obj.banner:
+            return None
+        return UploadedFileSerializer(obj.banner, context=self.context).data
+
+
+class CoursesByNavigationSerializer(serializers.ModelSerializer):
+    courses = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Navigation
+        fields = [
+            "id",
+            "name",
+            "slug",
+            "sort_order",
+            "courses",
+        ]
+
+    def get_courses(self, obj):
+        courses = obj.courses.all().order_by("sort_order", "created_at")
+        return CourseListByNavigationCourseSerializer(
+            courses,
+            many=True,
+            context=self.context,
+        ).data

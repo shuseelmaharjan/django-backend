@@ -10,7 +10,9 @@ from .serializers_public import (
 )
 
 
-def build_public_metadata(school):
+def build_public_metadata(school, request=None):
+    context = {"request": request} if request else {}
+
     navigations = Navigation.objects.filter(
         school=school
     ).prefetch_related(
@@ -35,14 +37,31 @@ def build_public_metadata(school):
         )
     ).order_by("created_at")
 
-    # NOTE:
-    # Events model currently has no school FK, so this is global for now.
     events = Events.objects.all().order_by("-event_date", "-created_at")
 
     return {
-        "school": PublicSchoolSerializer(school).data,
-        "navigations": NavigationCourseTreeSerializer(navigations, many=True).data,
-        "events": EventsSerializer(events, many=True).data,
-        "ads": AdsSerializer(ads, many=True).data,
-        "footer_groups": FooterGroupSerializer(footer_groups, many=True).data,
+        "school": PublicSchoolSerializer(
+            school,
+            context=context
+        ).data,
+        "navigations": NavigationCourseTreeSerializer(
+            navigations,
+            many=True,
+            context=context
+        ).data,
+        "events": EventsSerializer(
+            events,
+            many=True,
+            context=context
+        ).data,
+        "ads": AdsSerializer(
+            ads,
+            many=True,
+            context=context
+        ).data,
+        "footer_groups": FooterGroupSerializer(
+            footer_groups,
+            many=True,
+            context=context
+        ).data,
     }
