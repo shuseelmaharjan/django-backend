@@ -276,3 +276,25 @@ class CoursesByNavigationSerializer(serializers.ModelSerializer):
             many=True,
             context=self.context,
         ).data
+
+class CourseSearchSuggestionSerializer(serializers.ModelSerializer):
+    navigation = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Courses
+        fields = [
+            "id",
+            "name",
+            "slug",
+            "navigation",
+        ]
+
+    def get_navigation(self, obj):
+        if not obj.navigation:
+            return None
+
+        return {
+            "id": obj.navigation.id,
+            "name": obj.navigation.name,
+            "slug": obj.navigation.slug,
+        }

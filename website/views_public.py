@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from rest_framework.exceptions import NotFound
 from django.db.models import Prefetch
-
+from django.db.models import Q
 from .mixins import SchoolCodeMixin
 from .models import (
     Courses,
@@ -38,6 +38,7 @@ from .serializers_public import (
     GalleryGroupSerializer,
     CareersSerializer,
     CoursesByNavigationSerializer,
+    CourseSearchSuggestionSerializer,
 )
 from .services_public import build_public_metadata
 
@@ -290,5 +291,47 @@ class PublicAllCoursesByNavigationAPIView(SchoolCodeMixin, APIView):
                     many=True,
                     context=context,
                 ).data
+            }
+        })
+
+class PublicCourseSearchSuggestionsAPIView(SchoolCodeMixin, APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request, *args, **kwargs):
+        school = self.get_school()
+        context = {"request": request}
+
+        keyword = (request.query_params.get("keyword") or "").strip()
+
+        if not keyword:
+            return Response({
+                "meta": build_public_metadata(school, request),
+                "data": {
+                    "suggestions": [],
+                }
+            })
+
+        courses = Courses.objects.filter(
+            school=school
+        ).filter(
+            Q(name__icontains=keyword) |
+            Q(tags__icontains=keyword)
+        ).select_related(
+            "navigation"
+        ).order_by(
+            "sort_order",
+            "created_at",
+        )[:10]
+
+        return Response({
+            # "meta": build_public_metadata(school, request),
+            "data": {
+                "keyword": keyword,
+                "suggestions": CourseSearchSuggestionSerializer(
+                    courses,
+                    many=True,
+                    context=context,
+                ).data,
             }
         })
