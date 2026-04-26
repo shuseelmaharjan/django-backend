@@ -61,7 +61,7 @@ class NavigationCourseTreeSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "slug", "sort_order", "created_at", "courses"]
 
     def get_courses(self, obj):
-        courses = obj.courses.filter(is_popular=True).order_by("sort_order", "created_at")
+        courses = obj.courses.all().order_by("sort_order", "created_at")
         return CourseSerializer(courses, many=True, context=self.context).data
 
 
