@@ -12,7 +12,14 @@ from accounts.serializers.password_reset import (
     ForgotPasswordVerifyOTPSerializer,
     ForgotPasswordResetSerializer, ChangePasswordSerializer,
 )
-
+from accounts.serializers.profile import (
+    UserProfileSerializer,
+    UserBasicInfoUpdateSerializer,
+    ProfilePictureUpdateSerializer,
+    EmailChangeSendOTPSerializer,
+    EmailChangeVerifyOTPSerializer,
+)
+from common.permissions import IsAuthenticatedAndActive
 
 class ForgotPasswordSendOTPView(APIView):
     permission_classes = [AllowAny]
@@ -122,5 +129,239 @@ class ChangePasswordView(APIView):
         out = ser.save()
         return Response(
             {"changed": out["changed"], "message": "Password changed successfully."},
+            status=status.HTTP_200_OK,
+        )
+
+class MyProfileView(APIView):
+    permission_classes = [IsAuthenticatedAndActive]
+
+    @schema(
+        tag="02. Settings.Users",
+        summary="Get current user profile",
+        responses={
+            200: UserProfileSerializer,
+            401: OpenApiResponse(description="Unauthorized."),
+            403: OpenApiResponse(description="Inactive or deleted account."),
+        },
+    )
+    def get(self, request):
+        serializer = UserProfileSerializer(
+            request.user,
+            context={"request": request},
+        )
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class MyProfileBasicInfoUpdateView(APIView):
+    permission_classes = [IsAuthenticatedAndActive]
+
+    @schema(
+        tag="02. Settings.Users",
+        summary="Update current user's basic profile information",
+        description=(
+            "Updates first name, middle name, last name, and phone number. "
+            "Only the provided fields are updated."
+        ),
+        request=UserBasicInfoUpdateSerializer,
+        responses={
+            200: UserProfileSerializer,
+            400: OpenApiResponse(description="Validation error."),
+            401: OpenApiResponse(description="Unauthorized."),
+            403: OpenApiResponse(description="Inactive or deleted account."),
+        },
+    )
+    def patch(self, request):
+        serializer = UserBasicInfoUpdateSerializer(
+            request.user,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+
+        output = UserProfileSerializer(
+            user,
+            context={"request": request},
+        )
+
+        return Response(
+            {
+                "updated": True,
+                "message": "Profile information updated successfully.",
+                "user": output.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class MyProfilePictureUpdateView(APIView):
+    permission_classes = [IsAuthenticatedAndActive]
+
+    @schema(
+        tag="02. Settings.Users",
+        summary="Update current user's profile picture",
+        description=(
+            "Upload the image through the filehandler API first, then submit "
+            "the returned UploadedFile UUID as profile_picture_file."
+        ),
+        request=ProfilePictureUpdateSerializer,
+        responses={
+            200: UserProfileSerializer,
+            400: OpenApiResponse(description="Invalid file."),
+            401: OpenApiResponse(description="Unauthorized."),
+            403: OpenApiResponse(description="File belongs to another user."),
+        },
+    )
+    def patch(self, request):
+        serializer = ProfilePictureUpdateSerializer(
+            request.user,
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+
+        output = UserProfileSerializer(
+            user,
+            context={"request": request},
+        )
+
+        return Response(
+            {
+                "updated": True,
+                "message": "Profile picture updated successfully.",
+                "user": output.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @schema(
+        tag="02. Settings.Users",
+        summary="Remove current user's profile picture",
+        request=None,
+        responses={
+            200: UserProfileSerializer,
+            401: OpenApiResponse(description="Unauthorized."),
+        },
+    )
+    def delete(self, request):
+        request.user.profile_picture_file = None
+        request.user.save(update_fields=["profile_picture_file"])
+
+        output = UserProfileSerializer(
+            request.user,
+            context={"request": request},
+        )
+
+        return Response(
+            {
+                "removed": True,
+                "message": "Profile picture removed successfully.",
+                "user": output.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class EmailChangeSendOTPView(APIView):
+    permission_classes = [IsAuthenticatedAndActive]
+
+    @schema(
+        tag="02. Settings.Users",
+        summary="Request email change OTP",
+        description=(
+            "Sends an OTP to the user's existing email address. "
+            "The new email is not applied until OTP verification succeeds."
+        ),
+        request=EmailChangeSendOTPSerializer,
+        responses={
+            200: OpenApiResponse(
+                description="OTP sent to the existing email.",
+                examples=[
+                    OpenApiExample(
+                        "OTP sent",
+                        value={
+                            "sent": True,
+                            "message": (
+                                "A verification OTP has been sent to your "
+                                "existing email address."
+                            ),
+                        },
+                    )
+                ],
+            ),
+            400: OpenApiResponse(description="Validation error."),
+            401: OpenApiResponse(description="Unauthorized."),
+        },
+    )
+    def post(self, request):
+        serializer = EmailChangeSendOTPSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        output = serializer.save()
+
+        return Response(
+            {
+                "sent": output["sent"],
+                "message": (
+                    "A verification OTP has been sent to your existing "
+                    "email address."
+                ),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class EmailChangeVerifyOTPView(APIView):
+    permission_classes = [IsAuthenticatedAndActive]
+
+    @schema(
+        tag="02. Settings.Users",
+        summary="Verify OTP and change email",
+        description=(
+            "Verifies the OTP sent to the existing email and changes the "
+            "account email to the requested new email."
+        ),
+        request=EmailChangeVerifyOTPSerializer,
+        responses={
+            200: OpenApiResponse(
+                description="Email changed successfully.",
+                examples=[
+                    OpenApiExample(
+                        "Email changed",
+                        value={
+                            "changed": True,
+                            "message": "Email changed successfully.",
+                            "email": "new@example.com",
+                        },
+                    )
+                ],
+            ),
+            400: OpenApiResponse(
+                description="Invalid OTP, expired OTP, or unavailable email."
+            ),
+            401: OpenApiResponse(description="Unauthorized."),
+        },
+    )
+    def post(self, request):
+        serializer = EmailChangeVerifyOTPSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        output = serializer.save()
+
+        return Response(
+            {
+                "changed": output["changed"],
+                "message": "Email changed successfully.",
+                "email": output["new_email"],
+            },
             status=status.HTTP_200_OK,
         )

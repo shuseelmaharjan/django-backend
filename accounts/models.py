@@ -291,3 +291,60 @@ class PasswordResetOTP(models.Model):
     def mark_used(self):
         self.is_used = True
         self.save(update_fields=["is_used"])
+
+
+class EmailChangeOTP(models.Model):
+    """
+    Verifies an email change through the user's existing email address.
+
+    Flow:
+    1. User submits the proposed new email.
+    2. OTP is sent to the current/existing email.
+    3. User verifies OTP.
+    4. The user's email is changed to the pending new email.
+    """
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="email_change_otps",
+    )
+
+    current_email = models.EmailField(db_index=True)
+    new_email = models.EmailField(db_index=True)
+
+    otp_hash = models.CharField(max_length=128)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(db_index=True)
+
+    attempts = models.PositiveSmallIntegerField(default=0)
+    max_attempts = models.PositiveSmallIntegerField(default=5)
+
+    is_used = models.BooleanField(default=False)
+    verified_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "created_at"]),
+            models.Index(fields=["user", "is_used", "expires_at"]),
+            models.Index(fields=["current_email", "expires_at"]),
+            models.Index(fields=["new_email", "expires_at"]),
+        ]
+
+    @classmethod
+    def default_expiry(cls):
+        return timezone.now() + timedelta(minutes=10)
+
+    def expired(self) -> bool:
+        return timezone.now() >= self.expires_at
+
+    def mark_used(self):
+        self.is_used = True
+        self.save(update_fields=["is_used"])
