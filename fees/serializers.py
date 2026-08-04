@@ -9,6 +9,7 @@ from batch.models import AcademicBatch
 from django.core.exceptions import ValidationError as DjangoValidationError
 
 from fees.models import FeeStructure, FeeScope, FeeStatus
+from fees.services.configuration import get_fee_configuration
 from common.constants import Currency
 from utils.get_school_id_by_token import get_school_for_user
 
@@ -136,11 +137,10 @@ class FeeStructureSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"academic_class": ["Class must be empty for BATCH scope."]})
 
         elif scope == FeeScope.CLASS:
-            # you asked: CLASS requires BOTH batch and class
-            if batch is None:
-                raise serializers.ValidationError({"batch": ["Batch is required for CLASS scope."]})
             if academic_class is None:
                 raise serializers.ValidationError({"academic_class": ["Class is required for CLASS scope."]})
+            if batch is not None:
+                raise serializers.ValidationError({"batch": ["Batch must be empty for CLASS scope."]})
 
         elif scope == FeeScope.BATCH_CLASS:
             if batch is None:
@@ -188,7 +188,7 @@ class FeeStructureSerializer(serializers.ModelSerializer):
         school = get_school_for_user(request.user)
 
         validated_data["school"] = school
-        validated_data["currency"] = Currency.NPR  # always NPR
+        validated_data["currency"] = get_fee_configuration(school).currency
 
         try:
             obj = super().create(validated_data)
