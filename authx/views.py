@@ -1,8 +1,9 @@
 # authx/views.py
-
+from datetime import timedelta
 from django.conf import settings
 from django.utils import timezone
 
+from django.db.models import Q
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -242,39 +243,104 @@ class ActiveSessionListView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        summary="List all non-revoked sessions for current user (includes current device)",
+        summary=(
+            "List current active session and inactive sessions "
+            "seen within the last seven days"
+        ),
         responses={200: SessionListResponseSerializer},
     )
     def get(self, request):
-        # --- detect current sid ---
-        current_sid = None
+        current_sid = self._get_current_sid(request)
 
-        # 1) If authenticated via access token, request.auth is the validated token object
-        token = getattr(request, "auth", None)
-        if token is not None:
-            try:
-                current_sid = str(token.get("sid", "")) or None
-            except Exception:
-                current_sid = None
+        now = timezone.now()
+        one_week_ago = now - timedelta(days=7)
 
-        # 2) If access token path didn't give sid (or refresh-fallback used), try refresh token
-        if not current_sid:
-            token_str = read_refresh_token(request)
-            if token_str:
-                try:
-                    rt = RefreshToken(token_str)
-                    current_sid = str(rt.get("sid", "")) or None
-                except TokenError:
-                    current_sid = None
+        filters = Q()
 
-        # --- ONLY non-revoked sessions ---
-        qs = (
-            UserSession.objects.filter(user=request.user, revoked_at__isnull=True)
+        # Current session:
+        # is_active = true
+        # is_current = true
+        if current_sid:
+            filters |= Q(
+                id=current_sid,
+                revoked_at__isnull=True,
+                refresh_expires_at__gt=now,
+            )
+
+        # Recent inactive sessions:
+        # is_active = false
+        # is_current = false
+        #
+        # A session is inactive when:
+        # - it has been revoked, OR
+        # - its refresh token has expired
+        recent_inactive_filter = (
+            Q(last_seen_at__gte=one_week_ago)
+            & (
+                Q(revoked_at__isnull=False)
+                | Q(refresh_expires_at__lte=now)
+            )
+        )
+
+        # Explicitly exclude the current session from inactive results.
+        if current_sid:
+            recent_inactive_filter &= ~Q(id=current_sid)
+
+        filters |= recent_inactive_filter
+
+        sessions = (
+            UserSession.objects.filter(
+                filters,
+                user=request.user,
+            )
             .order_by("-last_seen_at", "-created_at")
         )
 
-        ser = UserSessionSerializer(qs, many=True, context={"current_sid": current_sid})
-        return Response({"sessions": ser.data}, status=status.HTTP_200_OK)
+        serializer = UserSessionSerializer(
+            sessions,
+            many=True,
+            context={
+                "request": request,
+                "current_sid": current_sid,
+            },
+        )
+
+        return Response(
+            {"sessions": serializer.data},
+            status=status.HTTP_200_OK,
+        )
+
+    @staticmethod
+    def _get_current_sid(request):
+        """
+        Get the current UserSession ID from the access-token sid claim.
+
+        If unavailable, fall back to the refresh-token sid claim.
+        """
+        access_token = getattr(request, "auth", None)
+
+        if access_token is not None:
+            try:
+                sid = str(access_token.get("sid", "")).strip()
+
+                if sid:
+                    return sid
+            except (AttributeError, TypeError, ValueError):
+                pass
+
+        refresh_token_string = read_refresh_token(request)
+
+        if refresh_token_string:
+            try:
+                refresh_token = RefreshToken(refresh_token_string)
+                sid = str(refresh_token.get("sid", "")).strip()
+
+                if sid:
+                    return sid
+            except TokenError:
+                pass
+
+        return None
 
 @extend_schema(tags=["01. Auth"])
 class RevokeSessionView(APIView):
