@@ -721,3 +721,174 @@ class FeeAuditEvent(ImmutableFinancialRecord):
     class Meta:
         indexes = [models.Index(fields=["school", "entity_type", "entity_id", "created_at"], name="fees_audit_entity_idx")]
         ordering = ["-created_at"]
+
+class InvoiceGenerationRunStatus(models.TextChoices):
+    PENDING = "PENDING", "Pending"
+    PROCESSING = "PROCESSING", "Processing"
+    COMPLETED = "COMPLETED", "Completed"
+    COMPLETED_WITH_ERRORS = (
+        "COMPLETED_WITH_ERRORS",
+        "Completed with errors",
+    )
+    FAILED = "FAILED", "Failed"
+
+
+class InvoiceGenerationItemStatus(models.TextChoices):
+    CREATED = "CREATED", "Created"
+    EXISTING = "EXISTING", "Existing"
+    FAILED = "FAILED", "Failed"
+    SKIPPED = "SKIPPED", "Skipped"
+
+
+class FeeInvoiceGenerationRun(models.Model):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    school = models.ForeignKey(
+        "schools.School",
+        on_delete=models.PROTECT,
+        related_name="invoice_generation_runs",
+    )
+
+    batch = models.ForeignKey(
+        "batch.AcademicBatch",
+        on_delete=models.PROTECT,
+        related_name="invoice_generation_runs",
+    )
+
+    academic_class = models.ForeignKey(
+        "academics.AcademicClass",
+        on_delete=models.PROTECT,
+        related_name="invoice_generation_runs",
+        null=True,
+        blank=True,
+    )
+
+    section = models.ForeignKey(
+        "academics.Section",
+        on_delete=models.PROTECT,
+        related_name="invoice_generation_runs",
+        null=True,
+        blank=True,
+    )
+
+    period_start = models.DateField()
+    period_end = models.DateField()
+    invoice_date = models.DateField()
+    due_date = models.DateField()
+
+    notes = models.CharField(
+        max_length=500,
+        blank=True,
+        default="",
+    )
+
+    idempotency_key = models.CharField(
+        max_length=100,
+    )
+
+    status = models.CharField(
+        max_length=30,
+        choices=InvoiceGenerationRunStatus.choices,
+        default=InvoiceGenerationRunStatus.PENDING,
+    )
+
+    matched_count = models.PositiveIntegerField(default=0)
+    created_count = models.PositiveIntegerField(default=0)
+    existing_count = models.PositiveIntegerField(default=0)
+    failed_count = models.PositiveIntegerField(default=0)
+
+    generated_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="invoice_generation_runs",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["school", "idempotency_key"],
+                name="uq_invoice_run_school_idempotency",
+            )
+        ]
+
+        indexes = [
+            models.Index(
+                fields=[
+                    "school",
+                    "batch",
+                    "academic_class",
+                    "section",
+                    "created_at",
+                ],
+                name="fee_inv_run_scope_idx",
+            ),
+            models.Index(
+                fields=["school", "status", "created_at"],
+                name="fee_inv_run_status_idx",
+            ),
+        ]
+
+
+class FeeInvoiceGenerationRunItem(models.Model):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    run = models.ForeignKey(
+        FeeInvoiceGenerationRun,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+
+    enrollment = models.ForeignKey(
+        "academics.StudentEnrollments",
+        on_delete=models.PROTECT,
+        related_name="invoice_generation_items",
+    )
+
+    student = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="invoice_generation_items",
+    )
+
+    invoice = models.ForeignKey(
+        FeeInvoice,
+        on_delete=models.PROTECT,
+        related_name="generation_items",
+        null=True,
+        blank=True,
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=InvoiceGenerationItemStatus.choices,
+    )
+
+    error_detail = models.JSONField(
+        default=dict,
+        blank=True,
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "enrollment"],
+                name="uq_invoice_run_enrollment",
+            )
+        ]

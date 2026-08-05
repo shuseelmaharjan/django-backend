@@ -83,26 +83,52 @@ class ProfileSerializer(serializers.ModelSerializer):
         return StudentOtherInfoSerializer(info).data if info else None
 
 
-class StudentEnrollmentMiniSerializer(serializers.ModelSerializer):
-    batch_id = serializers.IntegerField(source="batch_id", read_only=True)
-    academic_class_id = serializers.UUIDField(source="academic_class_id", read_only=True)
-    section_id = serializers.UUIDField(source="section_id", read_only=True, allow_null=True)
+class StudentEnrollmentMiniSerializer(
+    serializers.ModelSerializer
+):
+    batch_id = serializers.IntegerField(
+        read_only=True,
+    )
 
-    batch_name = serializers.CharField(source="batch.name", read_only=True)
-    class_name = serializers.CharField(source="academic_class.name", read_only=True)
-    section_name = serializers.CharField(source="section.name", read_only=True, allow_null=True)
+    academic_class_id = serializers.UUIDField(
+        read_only=True,
+    )
+
+    section_id = serializers.UUIDField(
+        read_only=True,
+        allow_null=True,
+    )
+
+    batch_name = serializers.CharField(
+        source="batch.name",
+        read_only=True,
+    )
+
+    class_name = serializers.CharField(
+        source="academic_class.name",
+        read_only=True,
+    )
+
+    section_name = serializers.CharField(
+        source="section.name",
+        read_only=True,
+        allow_null=True,
+        default=None,
+    )
 
     class Meta:
         model = StudentEnrollments
         fields = [
             "id",
-            "batch_id", "batch_name",
-            "academic_class_id", "class_name",
-            "section_id", "section_name",
+            "batch_id",
+            "batch_name",
+            "academic_class_id",
+            "class_name",
+            "section_id",
+            "section_name",
             "status",
             "enrolled_at",
         ]
-
 
 class StudentFullSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()

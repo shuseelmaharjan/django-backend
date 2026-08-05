@@ -553,67 +553,250 @@ def bulk_generate_invoices(
     enrollment_ids: list | None = None,
     batch_id=None,
     academic_class_id=None,
+    section_id=None,
     invoice_date: date | None = None,
     due_date: date | None = None,
     apply_advance: bool | None = None,
     notes: str = "",
 ):
-    qs = StudentEnrollments.objects.select_for_update().select_related(
-        "student", "batch__school", "academic_class"
-    ).filter(batch__school=school, status=EnrollmentStatus.ENROLLED)
+    """
+    Generate invoices for multiple active enrollments.
+
+    Selection must be based on exactly one of:
+    - enrollment_ids
+    - student_ids
+    - batch_id, optionally filtered by class and section
+
+    Existing invoices are returned instead of duplicated.
+
+    Important:
+    The enrollment rows are locked first without nullable joins.
+    Related objects are then loaded in a second query inside the same
+    transaction. This avoids PostgreSQL's:
+
+        FOR UPDATE cannot be applied to the nullable side
+        of an outer join
+    """
+
+    lock_queryset = (
+        StudentEnrollments.objects
+        .select_for_update()
+        .filter(
+            batch__school=school,
+            status=EnrollmentStatus.ENROLLED,
+        )
+    )
 
     if enrollment_ids:
-        qs = qs.filter(id__in=enrollment_ids)
+        lock_queryset = lock_queryset.filter(
+            id__in=enrollment_ids
+        )
+
     elif student_ids:
-        qs = qs.filter(student_id__in=student_ids)
+        lock_queryset = lock_queryset.filter(
+            student_id__in=student_ids
+        )
+
     else:
         if batch_id is None:
-            raise ValidationError({"selection": ["Provide student_ids, enrollment_ids, or batch_id."]})
-        qs = qs.filter(batch_id=batch_id)
-        if academic_class_id:
-            qs = qs.filter(academic_class_id=academic_class_id)
+            raise ValidationError({
+                "selection": [
+                    (
+                        "Provide student_ids, "
+                        "enrollment_ids, or batch_id."
+                    )
+                ]
+            })
 
-    enrollments = list(qs.order_by("student__first_name", "student__last_name", "student_id"))
-    if not enrollments:
-        raise ValidationError({"selection": ["No active enrollments matched the request."]})
+        lock_queryset = lock_queryset.filter(
+            batch_id=batch_id
+        )
+
+        if academic_class_id is not None:
+            lock_queryset = lock_queryset.filter(
+                academic_class_id=academic_class_id
+            )
+
+        if section_id is not None:
+            lock_queryset = lock_queryset.filter(
+                section_id=section_id
+            )
+
+    # Lock only StudentEnrollments rows.
+    # Do not join nullable section while applying FOR UPDATE.
+    locked_enrollment_ids = list(
+        lock_queryset
+        .order_by(
+            "academic_class_id",
+            "section_id",
+            "student_id",
+            "id",
+        )
+        .values_list(
+            "id",
+            flat=True,
+        )
+    )
+
+    if not locked_enrollment_ids:
+        raise ValidationError({
+            "selection": [
+                (
+                    "No active enrollments "
+                    "matched the request."
+                )
+            ]
+        })
+
+    # Load related records after the base enrollment rows are locked.
+    # This query remains inside the same transaction.
+    enrollments = list(
+        StudentEnrollments.objects
+        .select_related(
+            "student",
+            "batch",
+            "batch__school",
+            "academic_class",
+            "section",
+        )
+        .filter(
+            id__in=locked_enrollment_ids
+        )
+        .order_by(
+            "academic_class__name",
+            "section__name",
+            "student__first_name",
+            "student__middle_name",
+            "student__last_name",
+            "student_id",
+            "id",
+        )
+    )
+
+    if enrollment_ids:
+        requested_enrollment_ids = {
+            str(value)
+            for value in enrollment_ids
+        }
+
+        found_enrollment_ids = {
+            str(enrollment.id)
+            for enrollment in enrollments
+        }
+
+        missing_enrollment_ids = sorted(
+            requested_enrollment_ids
+            - found_enrollment_ids
+        )
+
+        if missing_enrollment_ids:
+            raise ValidationError({
+                "enrollment_ids": [
+                    (
+                        "No active enrollment found for: "
+                        + ", ".join(
+                            missing_enrollment_ids
+                        )
+                    )
+                ]
+            })
 
     if student_ids:
-        requested = {str(value) for value in student_ids}
-        found = {str(item.student_id) for item in enrollments}
-        missing = sorted(requested - found)
-        if missing:
-            raise ValidationError({"student_ids": [f"No active enrollment found for: {', '.join(missing)}"]})
-        duplicates = {}
-        for enrollment in enrollments:
-            duplicates.setdefault(str(enrollment.student_id), 0)
-            duplicates[str(enrollment.student_id)] += 1
-        ambiguous = [key for key, count in duplicates.items() if count > 1]
-        if ambiguous:
+        requested_student_ids = {
+            str(value)
+            for value in student_ids
+        }
+
+        found_student_ids = {
+            str(enrollment.student_id)
+            for enrollment in enrollments
+        }
+
+        missing_student_ids = sorted(
+            requested_student_ids
+            - found_student_ids
+        )
+
+        if missing_student_ids:
             raise ValidationError({
                 "student_ids": [
-                    "Some students have multiple active enrollments. Use enrollment_ids for: " + ", ".join(ambiguous)
+                    (
+                        "No active enrollment found for: "
+                        + ", ".join(
+                            missing_student_ids
+                        )
+                    )
+                ]
+            })
+
+        enrollment_counts: dict[str, int] = {}
+
+        for enrollment in enrollments:
+            student_key = str(
+                enrollment.student_id
+            )
+
+            enrollment_counts[student_key] = (
+                enrollment_counts.get(
+                    student_key,
+                    0,
+                )
+                + 1
+            )
+
+        ambiguous_student_ids = sorted(
+            student_id
+            for student_id, count
+            in enrollment_counts.items()
+            if count > 1
+        )
+
+        if ambiguous_student_ids:
+            raise ValidationError({
+                "student_ids": [
+                    (
+                        "Some students have multiple "
+                        "active enrollments. Use "
+                        "enrollment_ids for: "
+                        + ", ".join(
+                            ambiguous_student_ids
+                        )
+                    )
                 ]
             })
 
     results = []
-    errors = []
+
     for enrollment in enrollments:
         try:
-            invoice, created = generate_invoice(
-                school=school,
-                enrollment=enrollment,
-                period_start=period_start,
-                period_end=period_end,
-                actor=actor,
-                invoice_date=invoice_date,
-                due_date=due_date,
-                apply_advance=apply_advance,
-                notes=notes,
-            )
-            results.append((invoice, created))
-        except ValidationError as exc:
-            errors.append({"enrollment_id": str(enrollment.id), "detail": exc.detail})
+            # Each invoice gets an individual savepoint.
+            # One invalid student will not roll back successful invoices.
+            with transaction.atomic():
+                invoice, created = generate_invoice(
+                    school=school,
+                    enrollment=enrollment,
+                    period_start=period_start,
+                    period_end=period_end,
+                    actor=actor,
+                    invoice_date=invoice_date,
+                    due_date=due_date,
+                    apply_advance=apply_advance,
+                    notes=notes,
+                )
 
-    if errors:
-        raise ValidationError({"bulk_generation": errors})
+            results.append({
+                "enrollment": enrollment,
+                "invoice": invoice,
+                "created": created,
+                "error": None,
+            })
+
+        except ValidationError as exc:
+            results.append({
+                "enrollment": enrollment,
+                "invoice": None,
+                "created": False,
+                "error": exc.detail,
+            })
+
     return results
